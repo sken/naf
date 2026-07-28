@@ -1,23 +1,146 @@
+---
+interface Props {
+	title: string;
+	description?: string;
+}
+
+const { title, description = "Latest web platform features." } = Astro.props;
+---
+
 <!doctype html>
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Astro Basics</title>
+		<title>{title}</title>
+		<meta name="description" content={description} />
+		
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;700&display=swap" rel="stylesheet">
 	</head>
 	<body>
 		<slot />
+		
+		<script>
+			// UI Sound System (Godly.website style)
+			let audioCtx: AudioContext | null = null;
+
+			function initAudio() {
+				if (!audioCtx) {
+					audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+				}
+				if (audioCtx.state === 'suspended') {
+					audioCtx.resume();
+				}
+			}
+
+			function playTick() {
+				if (!audioCtx) return;
+				const osc = audioCtx.createOscillator();
+				const gain = audioCtx.createGain();
+				osc.connect(gain);
+				gain.connect(audioCtx.destination);
+				osc.type = 'sine';
+				osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+				osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.05);
+				gain.gain.setValueAtTime(0.02, audioCtx.currentTime);
+				gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+				osc.start();
+				osc.stop(audioCtx.currentTime + 0.05);
+			}
+
+			function playPop() {
+				if (!audioCtx) return;
+				const osc = audioCtx.createOscillator();
+				const gain = audioCtx.createGain();
+				osc.connect(gain);
+				gain.connect(audioCtx.destination);
+				osc.type = 'triangle';
+				osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+				osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
+				gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+				gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+				osc.start();
+				osc.stop(audioCtx.currentTime + 0.1);
+			}
+
+			// Initialize on first user interaction to comply with browser autoplay policies
+			document.addEventListener('click', initAudio, { once: true });
+			document.addEventListener('keydown', initAudio, { once: true });
+
+			// Keep track of elements we've already attached to
+			const attachedElements = new WeakSet();
+
+			function attachSounds() {
+				document.querySelectorAll('.sound-trigger, .filter-pill, .feature-card').forEach(el => {
+					if (!attachedElements.has(el)) {
+						el.addEventListener('mouseenter', playTick);
+						el.addEventListener('mousedown', playPop);
+						attachedElements.add(el);
+					}
+				});
+			}
+
+			// Run on load
+			document.addEventListener('DOMContentLoaded', attachSounds);
+			
+			// Observer for dynamic elements
+			const observer = new MutationObserver(() => {
+				attachSounds();
+			});
+			observer.observe(document.body, { childList: true, subtree: true });
+		</script>
 	</body>
 </html>
 
-<style>
-	html,
-	body {
+<style is:global>
+	:root {
+		--bg-color: #09090b;
+		--surface-color: #121214;
+		--surface-hover: #18181b;
+		--border-color: rgba(255, 255, 255, 0.1);
+		--text-primary: #fafafa;
+		--text-secondary: #a1a1aa;
+		--accent-glow: rgba(255, 255, 255, 0.15);
+		--gradient-primary: linear-gradient(135deg, #ffffff 0%, #a1a1aa 100%);
+		--coss-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05), 0 2px 8px -2px rgba(0, 0, 0, 0.5);
+	}
+
+	* {
+		box-sizing: border-box;
 		margin: 0;
+		padding: 0;
+	}
+
+	html, body {
 		width: 100%;
-		height: 100%;
+		min-height: 100vh;
+		background-color: var(--bg-color);
+		color: var(--text-primary);
+		font-family: 'Inter', sans-serif;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	h1, h2, h3, h4, h5, h6 {
+		font-family: 'Outfit', sans-serif;
+		letter-spacing: -0.02em;
+	}
+
+	/* Custom Scrollbar */
+	::-webkit-scrollbar {
+		width: 8px;
+	}
+	::-webkit-scrollbar-track {
+		background: var(--bg-color); 
+	}
+	::-webkit-scrollbar-thumb {
+		background: rgba(255, 255, 255, 0.15); 
+		border-radius: 4px;
+	}
+	::-webkit-scrollbar-thumb:hover {
+		background: rgba(255, 255, 255, 0.25); 
 	}
 </style>
