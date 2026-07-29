@@ -13,7 +13,7 @@
     "devTo": "https://dev.to/api/articles?tag=webdev&top=7",
     "npmDownloads": "https://api.npmjs.org/downloads/point/last-week/"
   },
-  "frameworks": ["react", "next", "astro", "svelte"],
+  "frameworks": ["react", "next", "astro", "svelte", "@angular/core"],
   "rssSources": [
     { "url": "https://www.smashingmagazine.com/feed", "name": "Smashing Mag" },
     { "url": "https://blog.logrocket.com/feed/", "name": "LogRocket" },
