@@ -6,6 +6,7 @@ import FeatureCard from '../components/FeatureCard.astro';
 import NewsCard from '../components/NewsCard.astro';
 import TrendCard from '../components/TrendCard.astro';
 import RepoCard from '../components/RepoCard.astro';
+import HubLogo from '../components/HubLogo.astro';
 import DevCard from '../components/DevCard.astro';
 import Parser from 'rss-parser';
 import * as cheerio from 'cheerio';
@@ -217,7 +218,7 @@ starredItems.forEach((item, i) => {
 	<main class="dashboard">
 		<header class="hero">
 			<div class="badge">hub.skendlba.dev</div>
-			<h1><img src="/hub-logo.svg" alt="Hub" style="height: 110px; width: auto; display: block; margin: 0 auto;" /></h1>
+			<h1><HubLogo /></h1>
 			<p>All the frontend signals you care about, minus the 45 open browser tabs.</p>
 		</header>
 
