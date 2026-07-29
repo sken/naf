@@ -40,18 +40,38 @@ try {
       const feed = await parser.parseURL(source.url);
       let filteredItems = feed.items;
 
-      // Filter Medium articles to ONLY English
+      // Filter Medium articles to ONLY English and high signal
       if (source.name.startsWith('Medium')) {
         // Exclude Cyrillic, CJK, Arabic, etc.
         const nonEngChars = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\u0400-\u04ff\u0600-\u06ff]/;
         // Exclude common foreign stopwords (Spanish, Portuguese, German, French)
         const foreignWords = /\b(como|para|el|la|en|que|los|las|una|con|por|uma|da|do|na|no|der|die|das|les|des)\b/i;
+        // Clickbait and spam filters
+        const clickbait = /\b(jasa|top \d+|stop using|you need to)\b/i;
         
         filteredItems = filteredItems.filter(item => {
           if (!item.title) return false;
           if (nonEngChars.test(item.title)) return false;
+          
+          // Drop ALL CAPS SPAM (e.g., JASA WEBSITE...)
+          const lettersOnly = item.title.replace(/[^a-zA-Z]/g, '');
+          if (lettersOnly.length > 10 && lettersOnly === lettersOnly.toUpperCase()) return false;
+          
+          // Drop clickbait patterns
+          if (clickbait.test(item.title)) return false;
+          
           const matches = item.title.match(foreignWords) || [];
-          return matches.length < 2; // Reject if title has multiple foreign stop words
+          if (matches.length >= 2) return false; // Reject if title has multiple foreign stop words
+
+          // Word count heuristic
+          const content = item['content:encoded'] || item.content || item.contentSnippet || '';
+          const textOnly = content.replace(/<[^>]*>?/gm, ' ');
+          const wordCount = textOnly.trim().split(/\s+/).length;
+          
+          // Drop suspiciously short articles
+          if (wordCount < 500) return false;
+          
+          return true;
         });
       }
 
