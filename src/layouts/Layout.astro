@@ -2,9 +2,14 @@
 interface Props {
 	title: string;
 	description?: string;
+	author?: string;
 }
 
-const { title, description = "Latest web platform features." } = Astro.props;
+const { 
+	title, 
+	description = "A unified dashboard of industry insights, platform features, and emerging web trends.",
+	author = "Stefan Kendlbacher" 
+} = Astro.props;
 ---
 
 <!doctype html>
@@ -14,8 +19,40 @@ const { title, description = "Latest web platform features." } = Astro.props;
 		<meta name="viewport" content="width=device-width" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<meta name="generator" content={Astro.generator} />
+		
+		<!-- SEO Meta Tags -->
 		<title>{title}</title>
 		<meta name="description" content={description} />
+		<meta name="author" content={author} />
+		<meta name="keywords" content="Stefan Kendlbacher, Web Trends, Frontend Development, Developer Dashboard, Hub" />
+		<link rel="canonical" href={`https://hub.skendlba.dev${Astro.url.pathname}`} />
+
+		<!-- Open Graph / Facebook -->
+		<meta property="og:type" content="website" />
+		<meta property="og:url" content={`https://hub.skendlba.dev${Astro.url.pathname}`} />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:site_name" content="Hub by Stefan Kendlbacher" />
+
+		<!-- Twitter -->
+		<meta property="twitter:card" content="summary_large_image" />
+		<meta property="twitter:url" content={`https://hub.skendlba.dev${Astro.url.pathname}`} />
+		<meta property="twitter:title" content={title} />
+		<meta property="twitter:description" content={description} />
+
+		<!-- JSON-LD Structured Data for Person/Creator -->
+		<script type="application/ld+json" set:html={JSON.stringify({
+			"@context": "https://schema.org",
+			"@type": "WebSite",
+			"name": title,
+			"url": "https://hub.skendlba.dev",
+			"description": description,
+			"author": {
+				"@type": "Person",
+				"name": author,
+				"url": "https://skendlba.dev"
+			}
+		})} />
 		
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
