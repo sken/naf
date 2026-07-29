@@ -207,18 +207,30 @@ const bgImage = `url("data:image/svg+xml,${svgData.replace(/</g, '%3C').replace(
 		outline-offset: 2px;
 	}
 
-	/* Custom Scrollbar */
-	::-webkit-scrollbar {
-		width: 8px;
+	/* Custom Scrollbar - Visible on Desktop, Hidden on Mobile */
+	@media (min-width: 769px) {
+		::-webkit-scrollbar {
+			width: 8px;
+		}
+		::-webkit-scrollbar-track {
+			background: var(--bg-color); 
+		}
+		::-webkit-scrollbar-thumb {
+			background: rgba(0, 0, 0, 0.15); 
+			border-radius: 4px;
+		}
+		::-webkit-scrollbar-thumb:hover {
+			background: rgba(0, 0, 0, 0.25); 
+		}
 	}
-	::-webkit-scrollbar-track {
-		background: var(--bg-color); 
-	}
-	::-webkit-scrollbar-thumb {
-		background: rgba(0, 0, 0, 0.15); 
-		border-radius: 4px;
-	}
-	::-webkit-scrollbar-thumb:hover {
-		background: rgba(0, 0, 0, 0.25); 
+
+	@media (max-width: 768px) {
+		::-webkit-scrollbar {
+			display: none;
+		}
+		* {
+			-ms-overflow-style: none;  /* IE and Edge */
+			scrollbar-width: none;  /* Firefox */
+		}
 	}
 </style>

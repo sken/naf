@@ -27,11 +27,16 @@ The color system avoids stark white and pure black, opting for a softer, organic
 - **AI Image Prompt Reference:** *"The word 'HUB' in uppercase letters, styled in a messy, whimsical ink-and-watercolor typography inspired by the illustrations of Jakob Martin Strid. Hand-drawn, loose, slightly wobbly black ink outlines filled with soft, textured watercolor washes. The watercolor should use a minimal color palette consisting only of a soft terracotta orange and a muted baltic blue. Clean white background. Typography only, no characters, no animals, no machinery."*
 
 ## Layout & Structure
-- **Bento Box Canvas:** The core UI is a bento grid using CSS container queries (`@container bento`).
-- **Dynamic Sizing:** Card sizing is dynamic based on content length (e.g., long titles automatically get `span-2`).
+- **Hybrid Responsive Layout:** The core UI adapts to the device context seamlessly.
+  - **Desktop:** CSS Multi-column layout (`column-count: 3`) creates an organic, staggered masonry effect where cards dynamically size vertically to fit their content.
+  - **Mobile:** A TikTok/Instagram-style single-column Vertical Reel Feed (`100vw`).
+- **Scroll Snapping (Mobile Only):** On mobile, scrolling uses native `scroll-snap-type: y mandatory` and `scroll-snap-align: center` for continuous, snappy content discovery. 
+- **Hidden Scrollbars (Mobile Only):** Scrollbars are hidden via CSS on mobile viewports to emulate native application mechanics.
 - **Filtering:** Client-side filtering is powered by the native `document.startViewTransition()` API via `display: none` manipulation for buttery smooth animations.
 
 ## Components
-**Standard Bento Card (`.bento-item`)**
-- Must include a clean, accessible save/bookmark button.
-- Styling relies on soft pastel backgrounds and subtle, colored borders rather than heavy drop shadows.
+**Standard Reel Card (`.reel-item`)**
+- Must include a clean, accessible save/bookmark button absolutely positioned without obscuring metadata.
+- **Visuals:** Cards simulate full-screen media using `radial-gradient` backgrounds mapped to thematic color glow variables. 
+- **Content:** Text and metadata are overlaid at the bottom using `justify-content: flex-end`.
+- **Performance:** Implements `content-visibility: auto` to optimize rendering of off-screen items in the infinite feed.

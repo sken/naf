@@ -11,111 +11,71 @@ const formattedStars = new Intl.NumberFormat('en-US').format(stars);
 ---
 
 <a href={url} target="_blank" rel="noopener noreferrer" class="repo-card sound-trigger">
-  <div class="card-header">
-    <span class="category-badge">{language || 'Code'}</span>
-    <span class="stars">{formattedStars} Stars</span>
+  <div class="content-overlay">
+    <div class="card-header">
+      <span class="category-badge">{language || 'Code'}</span>
+      <span class="stars">{formattedStars} Stars</span>
+    </div>
+    
+    <h3>{name}</h3>
+    <p>{description || 'No description provided.'}</p>
   </div>
-  
-  <h3>{name}</h3>
-  <p>{description || 'No description provided.'}</p>
-  
 </a>
 
 <style>
   .repo-card {
-    position: relative;
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: 8px;
-    padding: 1.5rem;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
-    overflow: hidden;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
-                border-color 0.3s ease,
-                box-shadow 0.3s ease;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    justify-content: flex-end;
     height: 100%;
+    width: 100%;
     text-decoration: none !important;
     color: var(--card-text);
-    z-index: 1;
-    
+    background: radial-gradient(ellipse at 50% -20%, var(--card-glow) 0%, transparent 70%);
+    transition: background 0.3s ease;
   }
 
   .repo-card:hover {
-    transform: translateY(-2px) scale(1.01);
-    border-color: var(--card-accent);
-    box-shadow: 0 8px 30px var(--card-glow);
+    background: radial-gradient(ellipse at 50% -20%, var(--card-glow) 10%, transparent 80%);
+  }
+
+  .content-overlay {
+    padding: 2rem 2rem 3rem 2rem;
   }
 
   .card-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
-    font-size: 0.8rem;
+    gap: 1rem;
+    font-size: 0.85rem;
     font-weight: 600;
-    
-    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
   }
 
-  .category-badge {
-    background: rgba(255, 255, 255, 0.1);
-    padding: 0.3rem 0.6rem;
+  .category-badge, .stars {
+    color: var(--card-text);
+    background: var(--card-glow);
+    border: 1px solid var(--card-border);
+    padding: 0.4rem 0.8rem;
     border-radius: 8px;
-    color: var(--card-accent);
-  }
-
-  .stars {
-    color: var(--card-accent);
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    padding: 0.3rem 0.6rem;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
   }
 
   h3 {
-    font-size: 1.25rem;
-    color: var(--card-text);
-    line-height: 1.4;
-    margin-top: 0.5rem;
+    font-size: 1.8rem;
+    line-height: 1.35;
+    margin: 0 0 0.5rem 0;
+    text-wrap: balance;
   }
 
   p {
-    color: var(--card-text);
-    font-size: 0.95rem;
+    font-size: 1.05rem;
     line-height: 1.6;
-    flex-grow: 1;
+    margin: 0;
+    opacity: 0.9;
     display: -webkit-box;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 4;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-
-
-  .description {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    color: var(--card-text);
-    font-size: 0.9rem;
-    line-height: 1.5;
-  }
-
-  /* Phase 2: Elastic Component */
-  @container bento (min-width: 450px) {
-    .description {
-      -webkit-line-clamp: 4;
-      font-size: 1rem;
-    }
-    h3 {
-      font-size: 1.5rem;
-    }
-  }
-
 </style>
