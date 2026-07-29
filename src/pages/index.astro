@@ -9,7 +9,7 @@ import RepoCard from '../components/RepoCard.astro';
 import DevCard from '../components/DevCard.astro';
 import Parser from 'rss-parser';
 import * as cheerio from 'cheerio';
-import config from '../../naf.config.json';
+import config from '../../hub.config.json';
 
 // 1. Fetch data from the Chrome Status API
 let features: any[] = [];
@@ -213,11 +213,11 @@ starredItems.forEach((item, i) => {
 
 ---
 
-<Layout title="Naf | Skendlab">
+<Layout title="Hub | Skendlab">
 	<main class="dashboard">
 		<header class="hero">
-			<div class="badge">naf.skendlab.de</div>
-			<h1>Naf</h1>
+			<div class="badge">hub.skendlba.dev</div>
+			<h1><img src="/hub-logo.svg" alt="Hub" style="height: 110px; width: auto; display: block; margin: 0 auto;" /></h1>
 			<p>All the frontend signals you care about, minus the 45 open browser tabs.</p>
 		</header>
 
