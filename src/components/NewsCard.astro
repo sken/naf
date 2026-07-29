@@ -21,9 +21,9 @@ const { title, link, date, source } = Astro.props;
 <style>
   .news-card {
     position: relative;
-    background: var(--surface-color);
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
     padding: 1.5rem;
     display: flex;
     flex-direction: column;
@@ -36,15 +36,15 @@ const { title, link, date, source } = Astro.props;
     -webkit-backdrop-filter: blur(10px);
     height: 100%;
     text-decoration: none !important;
-    color: inherit;
+    color: var(--card-text);
     z-index: 1;
-    box-shadow: var(--coss-shadow);
+    
   }
 
   .news-card:hover {
-    transform: translateY(-4px);
-    border-color: rgba(255, 255, 255, 0.2);
-    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05), 0 10px 30px -10px var(--accent-glow);
+    transform: translateY(-2px) scale(1.01);
+    border-color: var(--card-accent);
+    box-shadow: 0 8px 30px var(--card-glow);
   }
 
   .meta {
@@ -53,27 +53,36 @@ const { title, link, date, source } = Astro.props;
     align-items: center;
     font-size: 0.75rem;
     font-weight: 600;
-    text-transform: uppercase;
+    
     letter-spacing: 0.05em;
   }
 
   .source {
-    color: var(--text-primary);
+    color: var(--card-accent);
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.05);
     padding: 0.3rem 0.6rem;
-    border-radius: 6px;
+    border-radius: 8px;
   }
 
   .date {
-    color: var(--text-secondary);
+    color: var(--card-text);
   }
 
   h3 {
     font-size: 1.1rem;
-    color: #fff;
+    color: var(--card-text);
     line-height: 1.5;
     margin: 0;
+  }
+
+
+  /* Phase 2: Elastic Component */
+  @container bento (min-width: 450px) {
+    h3 {
+      font-size: 1.4rem;
+      line-height: 1.4;
+    }
   }
 
 </style>

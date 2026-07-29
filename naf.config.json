@@ -1,0 +1,30 @@
+{
+  "githubUser": "skendlba",
+  "limits": {
+    "chromeFeatures": 12,
+    "rssNews": 36,
+    "githubTrending": 6,
+    "githubStarred": 10,
+    "devToArticles": 6
+  },
+  "endpoints": {
+    "chromeStatus": "https://chromestatus.com/api/v0/features",
+    "githubTrending": "https://github.com/trending",
+    "devTo": "https://dev.to/api/articles?tag=webdev&top=7",
+    "npmDownloads": "https://api.npmjs.org/downloads/point/last-week/"
+  },
+  "frameworks": ["react", "next", "astro", "svelte"],
+  "rssSources": [
+    { "url": "https://www.smashingmagazine.com/feed", "name": "Smashing Mag" },
+    { "url": "https://blog.logrocket.com/feed/", "name": "LogRocket" },
+    { "url": "https://web.dev/feed.xml", "name": "Web.dev" },
+    { "url": "https://javascriptweekly.com/rss/", "name": "JS Weekly" },
+    { "url": "https://medium.com/feed/tag/web-development", "name": "Medium (Web)" },
+    { "url": "https://medium.com/feed/tag/spec-driven-development", "name": "Medium (Spec)" },
+    { "url": "https://medium.com/feed/tag/ai-agents", "name": "Medium (AI)" },
+    { "url": "https://github.blog/category/ai/feed/", "name": "GitHub AI" },
+    { "url": "https://www.wired.com/feed/rss", "name": "Wired" },
+    { "url": "https://techcrunch.com/feed/", "name": "TechCrunch" },
+    { "url": "https://heydesigner.com/feed/", "name": "HeyDesigner" }
+  ]
+}

@@ -1,91 +1,99 @@
 ---
+export const prerender = true;
+
 import Layout from '../layouts/Layout.astro';
 import FeatureCard from '../components/FeatureCard.astro';
 import NewsCard from '../components/NewsCard.astro';
 import TrendCard from '../components/TrendCard.astro';
 import RepoCard from '../components/RepoCard.astro';
+import DevCard from '../components/DevCard.astro';
 import Parser from 'rss-parser';
 import * as cheerio from 'cheerio';
+import config from '../../naf.config.json';
 
-// 1. Fetch data from the Chrome Status API during the build process
+// 1. Fetch data from the Chrome Status API
 let features: any[] = [];
-
 try {
-  const response = await fetch('https://chromestatus.com/api/v0/features');
+  const response = await fetch(config.endpoints.chromeStatus);
   if (response.ok) {
     let text = await response.text();
-    // ChromeStatus API uses )]}' to prevent JSON hijacking (XSSI)
-    if (text.startsWith(")]}'")) {
-      text = text.substring(4).trim();
-    }
+    if (text.startsWith(")]}'")) text = text.substring(4).trim();
     const data = JSON.parse(text);
-    // API returns an object with a "features" array
     if (data && Array.isArray(data.features)) {
-      features = data.features.slice(0, 12); // Get top 12 latest features
+      features = data.features.slice(0, config.limits.chromeFeatures);
     }
-  } else {
-    console.error('Failed to fetch features:', response.status);
   }
 } catch (e) {
-  console.error('Error fetching data:', e);
+  console.error('Error fetching features:', e);
 }
-
-// Extract unique statuses for the filter dropdown
-const uniqueStatuses = [...new Set(features.map(f => f.browsers?.chrome?.status?.text || "In Development"))].sort();
 
 // 2. Fetch RSS feeds for industry news
 let newsItems: any[] = [];
 try {
   const parser = new Parser();
-  const sources = [
-    { url: 'https://www.smashingmagazine.com/feed', name: 'Smashing Mag' },
-    { url: 'https://blog.logrocket.com/feed/', name: 'LogRocket' },
-    { url: 'https://web.dev/feed.xml', name: 'Web.dev' },
-    { url: 'https://javascriptweekly.com/rss/', name: 'JS Weekly' },
-    { url: 'https://medium.com/feed/tag/web-development', name: 'Medium (Web)' },
-    { url: 'https://medium.com/feed/tag/spec-driven-development', name: 'Medium (Spec)' },
-    { url: 'https://medium.com/feed/tag/ai-agents', name: 'Medium (AI)' },
-    { url: 'https://github.blog/category/ai/feed/', name: 'GitHub AI' }
-  ];
-
-  for (const source of sources) {
+  let guaranteedItems: any[] = [];
+  let poolItems: any[] = [];
+  
+  for (const source of config.rssSources) {
     try {
       const feed = await parser.parseURL(source.url);
-      const items = feed.items.slice(0, 3).map(item => ({
+      let filteredItems = feed.items;
+
+      // Filter Medium articles to ONLY English
+      if (source.name.startsWith('Medium')) {
+        // Exclude Cyrillic, CJK, Arabic, etc.
+        const nonEngChars = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\u0400-\u04ff\u0600-\u06ff]/;
+        // Exclude common foreign stopwords (Spanish, Portuguese, German, French)
+        const foreignWords = /\b(como|para|el|la|en|que|los|las|una|con|por|uma|da|do|na|no|der|die|das|les|des)\b/i;
+        
+        filteredItems = filteredItems.filter(item => {
+          if (!item.title) return false;
+          if (nonEngChars.test(item.title)) return false;
+          const matches = item.title.match(foreignWords) || [];
+          return matches.length < 2; // Reject if title has multiple foreign stop words
+        });
+      }
+
+      // Map all items to a standardized format
+      const items = filteredItems.map(item => ({
         title: item.title,
         link: item.link,
         pubDateObj: new Date(item.pubDate || item.isoDate || ''),
         date: new Date(item.pubDate || item.isoDate || '').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         source: source.name
       }));
-      newsItems = [...newsItems, ...items];
-    } catch (err) {
-      console.error(`Error fetching ${source.name}:`, err);
-    }
+      
+      // Extract exactly 2 items for the guaranteed list
+      guaranteedItems = [...guaranteedItems, ...items.slice(0, 2)];
+      // Push the rest into the general chronological pool
+      poolItems = [...poolItems, ...items.slice(2)];
+    } catch (err) {}
   }
-
-  // Sort by date, newest first
-  newsItems.sort((a, b) => b.pubDateObj.getTime() - a.pubDateObj.getTime());
   
-  // Take top 12 for the grid
-  newsItems = newsItems.slice(0, 12);
-} catch (e) {
-  console.error('Error fetching RSS:', e);
-}
+  // Sort the general pool by most recent
+  poolItems.sort((a, b) => b.pubDateObj.getTime() - a.pubDateObj.getTime());
+  
+  // Calculate remaining slots based on config limit
+  const remainingQuota = Math.max(0, config.limits.rssNews - guaranteedItems.length);
+  
+  // Combine guaranteed items with the absolute newest items from the pool
+  newsItems = [...guaranteedItems, ...poolItems.slice(0, remainingQuota)];
+  
+  // Final sort to display them chronologically in the UI
+  newsItems.sort((a, b) => b.pubDateObj.getTime() - a.pubDateObj.getTime());
+} catch (e) {}
 
-const uniqueSources = [...new Set(newsItems.map(n => n.source))].sort();
-
-// 3. Fetch GitHub Exploring Trends directly from the trending page
+// 3. Fetch GitHub Exploring Trends
 let githubRepos: any[] = [];
 try {
-  const res = await fetch('https://github.com/trending', {
+  const res = await fetch(config.endpoints.githubTrending, {
     headers: { 'User-Agent': 'Astro-Dashboard' }
   });
   if (res.ok) {
     const html = await res.text();
     const $ = cheerio.load(html);
     $('article.Box-row').each((i, el) => {
-      if(i >= 6) return;
+      if(i >= config.limits.githubTrending) return;
       const title = $(el).find('h2 a').text().replace(/\s+/g, '').trim();
       const url = 'https://github.com/' + title;
       const description = $(el).find('p').text().trim();
@@ -100,26 +108,109 @@ try {
       });
     });
   }
+} catch (e) {}
+
+// Fetch user's starred repos
+try {
+  const starredRes = await fetch(`https://api.github.com/users/${config.githubUser}/starred`, {
+    headers: { 'User-Agent': 'Astro-Dashboard' }
+  });
+  if (starredRes.ok) {
+    const starredData = await starredRes.json();
+    starredData.slice(0, config.limits.githubStarred).forEach((repo: any) => {
+      githubRepos.push({
+        full_name: repo.full_name,
+        html_url: repo.html_url,
+        description: repo.description,
+        language: repo.language || 'Starred',
+        stargazers_count: repo.stargazers_count
+      });
+    });
+  }
 } catch (e) {
-  console.error('Error fetching GitHub stats:', e);
+  console.error('Error fetching starred repos:', e);
 }
 
-// 4. Fetch NPM download stats for popular frameworks
+// 4. Fetch Dev.to Trending Articles
+let devItems: any[] = [];
+try {
+  const devRes = await fetch(config.endpoints.devTo);
+  if (devRes.ok) {
+    const articles = await devRes.json();
+    devItems = articles.slice(0, config.limits.devToArticles).map((article: any) => ({
+      title: article.title,
+      url: article.url,
+      reactions: article.positive_reactions_count,
+      author: article.user.name
+    }));
+  }
+} catch (e) {
+  console.error('Error fetching Dev.to:', e);
+}
+// 5. Fetch NPM download stats
 let npmStats: any[] = [];
 try {
-  const frameworks = ['react', 'next', 'astro', 'svelte'];
-  for (const fw of frameworks) {
-    const res = await fetch(`https://api.npmjs.org/downloads/point/last-week/${fw}`);
+  const frameworks = config.frameworks;
+  for (const framework of frameworks) {
+    const res = await fetch(`${config.endpoints.npmDownloads}${framework}`);
     if (res.ok) {
       const data = await res.json();
       npmStats.push({ framework: data.package, downloads: data.downloads });
     }
   }
-  // Sort by downloads descending
   npmStats.sort((a, b) => b.downloads - a.downloads);
-} catch (e) {
-  console.error('Error fetching NPM stats:', e);
+} catch (e) {}
+
+// Combine essential items into the unified canvas (NPM stats moved to footer)
+const allItems = [
+  ...newsItems.map(n => ({ type: 'news', category: 'articles', data: n })),
+  ...githubRepos.map(r => ({ type: 'github', category: 'repos', data: r })),
+  ...features.map(f => ({ type: 'chrome', category: 'platform', data: f })),
+  ...devItems.map(d => ({ type: 'dev', category: 'articles', data: d }))
+];
+
+// Phase 1: Intelligent Sizing Algorithm
+// Analyzes the actual content weight to determine how much grid space it needs
+function getSpanClass(item: any) {
+  if (item.type === 'npm') return ""; // NPM stats are just numbers, keep 1x1
+
+  if (item.type === 'github') {
+    // Repos with long descriptions deserve massive 2x2 hero blocks
+    if (item.data.description && item.data.description.length > 80) return "span-2 row-span-2";
+    return "span-2"; 
+  }
+
+  if (item.type === 'news') {
+    // Long headlines need horizontal breathing room
+    if (item.data.title.length > 65) return "span-2";
+    // Short punchy headlines look great in vertical stacks
+    if (item.data.title.length < 40) return "row-span-2";
+  }
+
+  if (item.type === 'dev') {
+    if (item.data.title && item.data.title.length > 70) return "span-2";
+    return "";
+  }
+
+  if (item.type === 'chrome') {
+    // Dense technical summaries need large reading areas
+    if (item.data.summary && item.data.summary.length > 100) return "span-2 row-span-2";
+    return "span-2";
+  }
+
+  return "";
 }
+
+// Shuffle array deterministically for the build
+let shuffled = allItems.filter(i => !(i.type === 'github' && i.data.language === 'Starred')).sort(() => 0.5 - Math.random());
+const starredItems = allItems.filter(i => i.type === 'github' && i.data.language === 'Starred');
+
+// Ensure starred repos are ALWAYS prominently included near the top of the canvas
+starredItems.forEach((item, i) => {
+  const insertIndex = Math.floor(Math.random() * (i + 5)); // Inject randomly into the first 15 slots
+  shuffled.splice(insertIndex, 0, item);
+});
+
 ---
 
 <Layout title="Naf | Skendlab">
@@ -127,165 +218,179 @@ try {
 		<header class="hero">
 			<div class="badge">naf.skendlab.de</div>
 			<h1>Naf</h1>
-			<p>The central hub for industry insights, platform features, and emerging web trends.</p>
+			<p>A unified canvas of industry insights, platform features, and emerging web trends.</p>
 		</header>
 
-		<section class="dashboard-section">
-			<div class="section-header">
-				<h2>Industry Insights</h2>
-				<p>Latest architectural deep-dives from top engineering resources.</p>
+		<!-- Unified Master Filter -->
+		<div class="filter-container">
+			<div class="filter-pills">
+				<button class="master-filter active sound-trigger" data-filter="all">All Signals</button>
+				<button class="master-filter filter-articles sound-trigger" data-filter="articles">Articles</button>
+				<button class="master-filter filter-repos sound-trigger" data-filter="repos">Repositories</button>
+				<button class="master-filter filter-platform sound-trigger" data-filter="platform">Platform Updates</button>
+				<button class="master-filter filter-saved sound-trigger" data-filter="saved">Saved</button>
 			</div>
-			
-			<div class="filter-container">
-				<div class="filter-pills">
-					<button class="news-filter-pill active sound-trigger" data-filter="all">All Sources</button>
-					{uniqueSources.map((src: any) => (
-						<button class="news-filter-pill sound-trigger" data-filter={src}>{src}</button>
-					))}
-				</div>
-			</div>
+		</div>
 
-			<div class="news-grid" id="news-grid">
-				{newsItems.map(news => (
-					<div class="news-item" data-source={news.source}>
-						<NewsCard title={news.title} link={news.link} date={news.date} source={news.source} />
-					</div>
-				))}
-			</div>
-		</section>
+		<!-- Single Unified Bento Box Canvas -->
+		<ul role="list" class="bento-grid main-bento">
+			{shuffled.map((item, i) => {
+				const spanClass = getSpanClass(item);
+				return (
+					<li 
+						class={`bento-item ${spanClass} type-${item.type}`} 
+						data-category={item.category}
+						data-payload={encodeURIComponent(JSON.stringify(item))}
+						style={`view-transition-name: bento-card-${i}; animation-delay: ${i * 0.05}s;`}
+					>
+						<button class="save-btn" title="Save this card" onclick={`window.saveCard(this.parentElement)`}>
+							<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+						</button>
+						{item.type === 'news' && <NewsCard {...item.data} />}
+						{item.type === 'github' && <RepoCard name={item.data.full_name} description={item.data.description} stars={item.data.stargazers_count} language={item.data.language} url={item.data.html_url} />}
+						{item.type === 'chrome' && <FeatureCard id={item.data.id} name={item.data.name} summary={item.data.summary} category={item.data.category} status={item.data.browsers?.chrome?.status?.text || "In Development"} />}
+						{item.type === 'dev' && <DevCard title={item.data.title} url={item.data.url} reactions={item.data.reactions} author={item.data.author} />}
+					</li>
+				)
+			})}
+		</ul>
 
-		<section class="dashboard-section">
-			<div class="section-header">
-				<h2>GitHub Explore Trends</h2>
-				<p>The most starred repositories created within the last 7 days.</p>
-			</div>
-			<div class="news-grid">
-				{githubRepos.map(repo => (
-					<RepoCard 
-						name={repo.full_name} 
-						description={repo.description} 
-						stars={repo.stargazers_count} 
-						language={repo.language}
-						url={repo.html_url} 
-					/>
-				))}
-			</div>
-		</section>
-
-		<section class="dashboard-section">
-			<div class="section-header">
-				<h2>Chrome Platform Status</h2>
-				<p>Upcoming features currently in development or recently shipped in Chromium.</p>
-			</div>
-			<div class="filter-container">
-				<div class="filter-pills">
-					<button class="filter-pill active sound-trigger" data-filter="all">All Features</button>
-					{uniqueStatuses.map((status: any) => (
-						<button class="filter-pill sound-trigger" data-filter={status}>{status}</button>
-					))}
-				</div>
-			</div>
-
-			<div class="features-grid" id="features-grid">
-				{features.length > 0 ? (
-					features.map((f: any) => (
-						<div class="feature-item" data-status={f.browsers?.chrome?.status?.text || "In Development"}>
-							<FeatureCard 
-								id={f.id}
-								name={f.name}
-								summary={f.summary}
-								category={f.category}
-								status={f.browsers?.chrome?.status?.text || "In Development"}
-							/>
-						</div>
-					))
-				) : (
-					<div class="loading-state">
-						<p>Unable to load features at this time.</p>
-					</div>
-				)}
-			</div>
-		</section>
-
-		<section class="dashboard-section">
-			<div class="section-header">
-				<h2>Weekly Framework Downloads</h2>
-				<p>Live NPM registry data tracking ecosystem adoption over the last 7 days.</p>
-			</div>
-			<div class="trends-grid">
+		<!-- Framework Stats Footer -->
+		<section class="stats-footer">
+			<h2>Weekly Framework Adoption</h2>
+			<ul role="list" class="footer-bento">
 				{npmStats.map(stat => (
-					<TrendCard framework={stat.framework} downloads={stat.downloads} />
+					<li class="bento-item type-npm">
+						<TrendCard framework={stat.framework} downloads={stat.downloads} />
+					</li>
 				))}
-			</div>
+			</ul>
 		</section>
 	</main>
 </Layout>
 
 <script>
-	const filterPills = document.querySelectorAll('.filter-pill');
-	const items = document.querySelectorAll('.feature-item');
-	const newsFilterPills = document.querySelectorAll('.news-filter-pill');
-	const newsItemsList = document.querySelectorAll('.news-item');
+	const filters = document.querySelectorAll('.master-filter');
+	const items = document.querySelectorAll('.bento-item');
 
-	newsFilterPills.forEach(pill => {
-		pill.addEventListener('click', (e) => {
-			newsFilterPills.forEach(p => p.classList.remove('active'));
+	filters.forEach(filter => {
+		filter.addEventListener('click', (e) => {
+			filters.forEach(f => f.classList.remove('active'));
 			const clickedPill = e.target as HTMLButtonElement;
 			clickedPill.classList.add('active');
 
-			const selectedSource = clickedPill.dataset.filter;
+			const filterCategory = clickedPill.dataset.filter;
 			
-			newsItemsList.forEach(item => {
-				const htmlItem = item as HTMLElement;
-				if (selectedSource === 'all' || htmlItem.dataset.source === selectedSource) {
-					htmlItem.style.display = 'block';
-					htmlItem.style.animation = 'none';
-					setTimeout(() => {
-						htmlItem.style.animation = 'fadeIn 0.4s ease forwards';
-					}, 10);
-				} else {
-					htmlItem.style.display = 'none';
+			const updateDOM = async () => {
+				if (filterCategory === 'saved') {
+					await window.loadSavedCards();
 				}
-			});
+				
+				// Re-query items since we might have injected new ones
+				const currentItems = document.querySelectorAll('.bento-item');
+				currentItems.forEach(item => {
+					const htmlItem = item as HTMLElement;
+					if (filterCategory === 'all' || htmlItem.dataset.category === filterCategory) {
+						htmlItem.style.display = 'flex';
+					} else {
+						htmlItem.style.display = 'none';
+					}
+				});
+			};
+
+			// Phase 3: Butter-smooth Grid Layout Animations
+			if (document.startViewTransition) {
+				document.startViewTransition(updateDOM);
+			} else {
+				updateDOM();
+			}
 		});
 	});
 
-	filterPills.forEach(pill => {
-		pill.addEventListener('click', (e) => {
-			// Update active state
-			filterPills.forEach(p => p.classList.remove('active'));
-			const clickedPill = e.target as HTMLButtonElement;
-			clickedPill.classList.add('active');
+	window.saveCard = async (element) => {
+		let pin = localStorage.getItem('naf_admin_pin');
+		if (!pin) {
+			pin = prompt("Enter Admin PIN to authorize saving:");
+			if (!pin) return;
+			localStorage.setItem('naf_admin_pin', pin);
+		}
 
-			const selectedStatus = clickedPill.dataset.filter;
-			
-			items.forEach(item => {
-				const htmlItem = item as HTMLElement;
-				if (selectedStatus === 'all' || htmlItem.dataset.status === selectedStatus) {
-					htmlItem.style.display = 'block';
-					// Reset and trigger animation
-					htmlItem.style.animation = 'none';
-					setTimeout(() => {
-						htmlItem.style.animation = 'fadeIn 0.4s ease forwards';
-					}, 10);
-				} else {
-					htmlItem.style.display = 'none';
-				}
+		const btn = element.querySelector('.save-btn');
+		btn.style.stroke = 'var(--aros-primary)';
+		
+		try {
+			const payload = JSON.parse(decodeURIComponent(element.dataset.payload));
+			const res = await fetch('/api/saved', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${pin}`
+				},
+				body: JSON.stringify(payload)
 			});
-		});
-	});
+			if (!res.ok) {
+				if (res.status === 401) {
+					localStorage.removeItem('naf_admin_pin');
+					alert("Invalid PIN. Please try again.");
+				}
+				throw new Error("Failed to save");
+			}
+			btn.style.fill = 'var(--aros-primary)';
+		} catch (e) {
+			console.error(e);
+			btn.style.stroke = 'red';
+		}
+	};
+
+	window.loadSavedCards = async () => {
+		let pin = localStorage.getItem('naf_admin_pin');
+		if (!pin) {
+			pin = prompt("Enter Admin PIN to view saved cards:");
+			if (!pin) return;
+			localStorage.setItem('naf_admin_pin', pin);
+		}
+
+		try {
+			const res = await fetch('/api/saved', {
+				headers: { 'Authorization': `Bearer ${pin}` }
+			});
+			if (!res.ok) return;
+			const cards = await res.json();
+			
+			const grid = document.querySelector('.bento-grid');
+			// Remove previously injected saved cards
+			document.querySelectorAll('.bento-item[data-category="saved"]').forEach(el => el.remove());
+			
+			cards.forEach((item, i) => {
+				const li = document.createElement('li');
+				li.className = `bento-item type-${item.type}`;
+				li.dataset.category = 'saved';
+				
+				const d = item.data;
+				let innerHTML = '';
+				
+				if (item.type === 'news') innerHTML = `<a href="${d.link}" class="card-link" target="_blank"><article class="news-card"><header class="meta"><span class="source">${d.source}</span></header><h3 class="title" style="margin-top:0.5rem;font-size:1.5rem;font-weight:600;">${d.title}</h3></article></a>`;
+				if (item.type === 'dev') innerHTML = `<a href="${d.url}" class="card-link" target="_blank"><article class="dev-card"><header class="meta"><span class="author">${d.author}</span><span class="reactions">❤️ ${d.reactions}</span></header><h3 class="title" style="margin-top:0.5rem;font-size:1.5rem;font-weight:600;">${d.title}</h3></article></a>`;
+				if (item.type === 'github') innerHTML = `<a href="${d.html_url}" class="card-link" target="_blank"><article class="repo-card"><header class="repo-header" style="display:flex;justify-content:space-between;"><h3>${d.full_name}</h3><span class="stars">⭐ ${d.stargazers_count}</span></header><p class="description" style="margin-top:0.5rem;color:var(--text-secondary);">${d.description || ''}</p></article></a>`;
+				if (item.type === 'chrome') innerHTML = `<div class="feature-card"><header class="feature-header"><h3>${d.name}</h3></header><p class="summary" style="margin-top:0.5rem;color:var(--text-secondary);">${d.summary}</p></div>`;
+				
+				li.innerHTML = innerHTML;
+				grid.appendChild(li);
+			});
+		} catch(e) { console.error(e); }
+	};
 </script>
 
 <style>
 	.dashboard {
-		max-width: 1200px;
+		max-width: 1300px;
 		margin: 0 auto;
 		padding: 4rem 2rem;
 	}
 
 	.hero {
 		text-align: center;
-		margin-bottom: 4rem;
+		margin-bottom: 3rem;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -293,25 +398,22 @@ try {
 	}
 
 	.badge {
-		background: rgba(255, 255, 255, 0.1);
-		padding: 0.5rem 1rem;
-		border-radius: 20px;
-		font-size: 0.85rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.1em;
+		display: inline-block;
+		padding: 0.3rem 0.75rem;
+		background: rgba(255, 255, 255, 0.03);
 		border: 1px solid var(--border-color);
+		border-radius: 9999px;
+		font-size: 0.75rem;
+		font-weight: 500;
+		letter-spacing: 0.05em;
+		margin-bottom: 1.5rem;
 	}
 
 	h1 {
-		font-size: 4rem;
+		font-size: 4.5rem;
 		font-weight: 700;
 		line-height: 1.1;
 		margin: 0;
-	}
-
-	.text-gradient {
-		color: var(--text-primary);
 	}
 
 	.hero p {
@@ -319,38 +421,6 @@ try {
 		font-size: 1.25rem;
 		max-width: 600px;
 		line-height: 1.6;
-	}
-
-	.dashboard-section {
-		margin-bottom: 6rem;
-		position: relative;
-	}
-
-	.section-header {
-		margin-bottom: 2.5rem;
-	}
-
-	.section-header h2 {
-		font-size: 2.5rem;
-		margin-bottom: 0.5rem;
-		color: #fff;
-	}
-
-	.section-header p {
-		color: var(--text-secondary);
-		font-size: 1.1rem;
-	}
-
-	.trends-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: 1.5rem;
-	}
-
-	.news-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-		gap: 1.5rem;
 	}
 
 	.filter-container {
@@ -365,68 +435,164 @@ try {
 		flex-wrap: wrap;
 		gap: 0.75rem;
 		justify-content: center;
-		background: rgba(255, 255, 255, 0.03);
-		padding: 0.5rem;
-		border-radius: 100px;
-		border: 1px solid var(--border-color);
-		backdrop-filter: blur(10px);
 	}
 
-	.filter-pill, .news-filter-pill {
-		background: transparent;
-		border: none;
-		color: var(--text-secondary);
+	.master-filter {
+		background: #ffffff;
+		border: 1px solid var(--border-color);
+		color: var(--text-primary);
 		padding: 0.5rem 1.25rem;
-		border-radius: 100px;
-		font-family: 'Inter', sans-serif;
+		border-radius: 9999px;
 		font-size: 0.9rem;
 		font-weight: 500;
 		cursor: pointer;
-		transition: all 0.3s ease;
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
 	}
 
-	.filter-pill:hover, .news-filter-pill:hover {
-		color: var(--text-primary);
-		background: rgba(255, 255, 255, 0.05);
+	.master-filter:hover {
+		transform: translateY(-2px);
+		box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
 	}
 
-	.filter-pill.active, .news-filter-pill.active {
+	/* Thematic Active States */
+	.master-filter[data-filter="all"].active {
 		background: var(--text-primary);
-		color: var(--bg-color);
-		box-shadow: 0 4px 15px rgba(255, 255, 255, 0.05);
+		color: #ffffff;
+		border-color: var(--text-primary);
 	}
 
-	.features-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-		gap: 2rem;
+	.master-filter.filter-articles.active {
+		background: var(--aros-bg);
+		color: var(--aros-primary);
+		border-color: var(--aros-primary);
 	}
 
-	.feature-item, .news-item {
-		height: 100%;
+	.master-filter.filter-repos.active {
+		background: var(--heritage-bg);
+		color: var(--heritage-primary);
+		border-color: var(--heritage-primary);
 	}
 
-	@keyframes fadeIn {
-		from { opacity: 0; transform: translateY(10px); }
-		to { opacity: 1; transform: translateY(0); }
+	.master-filter.filter-platform.active {
+		background: var(--coastal-bg);
+		color: var(--coastal-primary);
+		border-color: var(--coastal-primary);
 	}
 
-	.loading-state {
-		grid-column: 1 / -1;
-		text-align: center;
-		padding: 4rem;
+	.master-filter.filter-saved.active {
+		background: var(--aros-bg);
+		color: var(--aros-primary);
+		border-color: var(--aros-primary);
+	}
+
+	.save-btn {
+		position: absolute;
+		top: 1rem;
+		right: 1rem;
+		background: rgba(255, 255, 255, 0.8);
+		border: 1px solid rgba(0,0,0,0.1);
+		border-radius: 50%;
+		width: 36px;
+		height: 36px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		cursor: pointer;
 		color: var(--text-secondary);
-		background: var(--surface-color);
-		border-radius: 16px;
-		border: 1px solid var(--border-color);
+		transition: all 0.2s;
+		z-index: 10;
+		opacity: 0;
 	}
 
-	@media (max-width: 768px) {
-		h1 {
-			font-size: 2.5rem;
+	.bento-item:hover .save-btn {
+		opacity: 1;
+	}
+
+	.save-btn:hover {
+		transform: scale(1.1);
+		color: var(--aros-primary);
+	}
+
+	/* BENTO BOX GRID SYSTEM */
+	.bento-grid {
+		display: grid;
+		gap: 1.5rem;
+		list-style: none;
+		margin-bottom: 1.5rem;
+	}
+
+	.main-bento {
+		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+		grid-auto-rows: minmax(200px, auto);
+		grid-auto-flow: dense;
+	}
+
+	.bento-item {
+		position: relative;
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+		container-type: inline-size;
+		container-name: bento;
+		opacity: 0;
+		animation: slideUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	}
+
+	/* Thematic Glows & Aarhus Palettes */
+	.type-github { --card-bg: var(--heritage-bg); --card-text: var(--heritage-text); --card-accent: var(--heritage-primary); --card-border: var(--heritage-secondary); --card-glow: rgba(212, 140, 132, 0.15); }
+	.type-chrome { --card-bg: var(--coastal-bg); --card-text: var(--coastal-text); --card-accent: var(--coastal-primary); --card-border: var(--coastal-secondary); --card-glow: rgba(42, 111, 151, 0.15); }
+	.type-news { --card-bg: var(--aros-bg); --card-text: var(--aros-text); --card-accent: var(--aros-primary); --card-border: var(--aros-secondary); --card-glow: rgba(224, 122, 95, 0.15); }
+	.type-dev { --card-bg: var(--coastal-bg); --card-text: var(--coastal-text); --card-accent: var(--coastal-primary); --card-border: var(--coastal-secondary); --card-glow: rgba(42, 111, 151, 0.15); }
+	.type-npm { --card-bg: var(--aros-secondary); --card-text: var(--aros-text); --card-accent: var(--aros-primary); --card-border: var(--aros-primary); --card-glow: rgba(242, 204, 143, 0.3); }
+
+	/* STATS FOOTER */
+	.stats-footer {
+		margin-top: 6rem;
+		padding-top: 3rem;
+		border-top: 1px solid var(--border-color);
+	}
+	.stats-footer h2 {
+		font-size: 1.5rem;
+		color: var(--text-secondary);
+		margin-bottom: 2rem;
+		text-align: center;
+	}
+	.footer-bento {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: 1.5rem;
+		list-style: none;
+	}
+
+	/* CSS Grid Masonry Classes */
+	.span-2 {
+		grid-column: span 2;
+	}
+
+	.row-span-2 {
+		grid-row: span 2;
+	}
+
+	@keyframes slideUp {
+		from { opacity: 0; transform: translateY(30px) scale(0.98); }
+		to { opacity: 1; transform: translateY(0) scale(1); }
+	}
+
+	/* View Transitions overrides */
+	::view-transition-old(root),
+	::view-transition-new(root) {
+		animation-duration: 0.4s;
+	}
+
+	/* Responsive Fallbacks */
+	@media (max-width: 900px) {
+		h1 { font-size: 3rem; }
+		.hero-bento {
+			grid-template-columns: 1fr;
 		}
-		.dashboard {
-			padding: 2rem 1.5rem;
+		.span-2 {
+			grid-column: span 1;
 		}
 	}
 </style>

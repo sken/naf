@@ -1,0 +1,92 @@
+---
+interface Props {
+  title: string;
+  url: string;
+  reactions: number;
+  author: string;
+}
+const { title, url, reactions, author } = Astro.props;
+---
+
+<a href={url} target="_blank" rel="noopener noreferrer" class="dev-card sound-trigger">
+  <div class="card-header">
+    <span class="category-badge">Dev.to</span>
+    <span class="reactions">❤️ {reactions}</span>
+  </div>
+  
+  <h3>{title}</h3>
+  
+  <p class="author">by {author}</p>
+</a>
+
+<style>
+  .dev-card {
+    position: relative;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow: hidden;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), 
+                border-color 0.3s ease,
+                box-shadow 0.3s ease;
+    height: 100%;
+    text-decoration: none !important;
+    color: var(--card-text);
+  }
+
+  .dev-card:hover {
+    transform: translateY(-2px) scale(1.01);
+    border-color: var(--card-accent);
+    box-shadow: 0 8px 30px var(--card-glow);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+
+  .category-badge {
+    background: rgba(0, 0, 0, 0.05);
+    padding: 0.3rem 0.6rem;
+    border-radius: 8px;
+    color: var(--card-accent);
+  }
+
+  .reactions {
+    color: var(--card-accent);
+    font-weight: 700;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+    color: var(--card-text);
+    line-height: 1.4;
+    margin-top: 0.5rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .author {
+    color: var(--card-text);
+    opacity: 0.7;
+    font-size: 0.9rem;
+    margin-top: auto;
+  }
+
+  @container bento (min-width: 450px) {
+    h3 {
+      font-size: 1.5rem;
+      -webkit-line-clamp: 6;
+    }
+  }
+</style>

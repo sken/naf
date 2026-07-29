@@ -1,41 +1,52 @@
 # Project: Naf
 
 **Domain:** naf.skendlab.de
-**Repository:** skendlba/naf (or equivalent)
+**Repository:** skendlba/naf
 
 ## Overview
-Naf is a statically generated dashboard that aggregates the cutting-edge of web development by tracking multiple vectors of the frontend ecosystem. It executes server-side data fetching at build-time to avoid API rate limits and ensure instant client-side loads, making it perfectly optimized for a zero-config Vercel deployment. 
+Naf is a statically generated discovery dashboard that tracks multiple vectors of the frontend ecosystem (News, Repos, Chrome Status, NPM). It executes server-side data fetching entirely at build-time to avoid API rate limits and ensure instant client-side loads. 
 
 ## Tech Stack
-- Framework: Astro (Static Site Generation / SSG)
-- Language: TypeScript / HTML
-- Styling: Vanilla CSS (NO TailwindCSS unless explicitly authorized by the user)
-
-## Design System (COSS UI Aesthetic)
-The project strictly follows a brutalist, minimalist, premium developer aesthetic inspired by coss.com/ui:
-- **Colors:** Zinc palette. Background is `#09090b`, Card surfaces are `#121214` to `#18181b`.
-- **Text:** Primary text is `#fafafa`, secondary is `#a1a1aa`. No bright colors.
-- **Card Borders (CRITICAL):** Cards must have the COSS UI stamped metal 3D edge effect using this exact box-shadow: `inset 0 1px 0 0 rgba(255, 255, 255, 0.05), 0 2px 8px -2px rgba(0, 0, 0, 0.5)`.
-- **Gradients:** DO NOT use colorful gradients. Any gradients must be strictly monochrome (e.g., `#ffffff` to `#a1a1aa`).
-- **Hover States:** Keep hover effects structural (e.g., subtle `translateY(-4px)` with white/neutral shadow glows). No mouse-tracking or colorful background glows.
-- **Badges:** Use flat, outlined badges with neutral text (`color: var(--text-primary); border: 1px solid rgba(255, 255, 255, 0.05)`).
-
-## Data Fetching Architecture
-All data fetching happens **at build time** in `index.astro` to ensure fast loads and avoid rate limits. Do not convert the project to SSR.
-- **Industry Insights:** `rss-parser` aggregates feeds (LogRocket, Smashing Mag, JS Weekly, etc.).
-- **GitHub Trends:** `cheerio` scrapes `github.com/trending` to bypass auth requirements.
-- **Chrome Status & NPM:** Fetches from `chromestatus.com/api` and `api.npmjs.org`.
-- **Filtering:** Filtering is handled entirely via client-side Vanilla JS in `index.astro` (DOM manipulation of `.feature-item` / `.news-item` display properties).
+- **Framework:** Astro 7 (Static Site Generation / SSG with Hybrid API endpoints)
+- **Language:** TypeScript / HTML
+- **Styling:** Vanilla CSS (NO TailwindCSS unless explicitly authorized by the user)
+- **Database:** Vercel KV (Redis) via `ioredis` for saving user bookmarks
+- **Package Manager:** `pnpm` MUST be used for all dependency management and scripts. Do NOT use `npm`.
 
 ## Commands
-- Build: `npm run build`
-- Dev Server: `astro dev --background`
-  - Manage the background server with `astro dev stop`, `astro dev status`, and `astro dev logs`.
+- **Dev Server:** `pnpm run dev`
+- **Build:** `pnpm run build`
+- **Sync Env Vars:** `npx vercel env pull .env.local`
+
+## Code Conventions
+- **Routing:** API routes in `src/pages/api/` (SSR). UI routes in `src/pages/` (SSG via `export const prerender = true;`).
+- **Styling:** Use standard CSS variables (`var(--color-name)`) defined in `Layout.astro`.
+- **Card Sizing:** Dynamic based on content length (e.g., long titles get `span-2`), orchestrated in `index.astro` using Container Queries (`@container bento`).
+- **DOM Animations:** Client-side filtering is powered by the native `document.startViewTransition()` API via `display: none` manipulation.
 
 ## Boundaries & Constraints
-- Always preserve existing Vanilla CSS logic.
-- Do not add heavy client-side frameworks (React, Vue) unless requested.
-- If scraping or RSS logic breaks, fix the parsing logic instead of moving to an authenticated API if possible.
+- **Strict Architecture:** Keep data fetching strictly locked to the Astro build step for the main dashboard grid. Do not convert the main page to full SSR.
+- **Client Frameworks:** Do not add heavy client-side frameworks (React, Vue, Alpine) unless explicitly requested. Rely on Vanilla JS for interactivity.
+- **Authentication:** The `/api/saved` endpoint requires a Bearer token matching the `ADMIN_PIN` environment variable.
+- **Git Operations:** Always provide a suggested Git commit message for the user when a task is completed. NEVER write or execute any `git commit` or `git add` commands automatically.
 
-## Documentation
-- Astro Guides: https://docs.astro.build
+## Project Architecture
+- **Zero-Config Data:** The dashboard is driven entirely by a local JSON file (`naf.config.json`). All API endpoints, RSS feeds, and GitHub handles must be read from this file at build time.
+- **Fair Representation RSS:** The build step guarantees at least 2 articles from every successful RSS source before filling the quota with a global chronological sort.
+- **Design System (Aarhus Light Mode):**
+  - **Articles (ARoS Modernism):** Birch Milk backgrounds, Soft Terracotta accents.
+  - **Repositories (Historic Heritage):** Pale Cobblestone backgrounds, Dusty Rose borders.
+  - **Platform Updates (Coastal Minimalism):** Fog White backgrounds, Baltic Blue borders.
+
+## Patterns
+**Standard Bento Card Structure (Astro):**
+```html
+<li class="bento-item span-2 type-github" data-category="repos" data-payload={encodeURIComponent(JSON.stringify(item))}>
+    <button class="save-btn" onclick="window.saveCard(this.parentElement)">
+        <svg><!-- Bookmark Icon --></svg>
+    </button>
+    <article class="repo-card">
+        <!-- Content -->
+    </article>
+</li>
+```

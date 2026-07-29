@@ -98,15 +98,36 @@ const { title, description = "Latest web platform features." } = Astro.props;
 
 <style is:global>
 	:root {
-		--bg-color: #09090b;
-		--surface-color: #121214;
-		--surface-hover: #18181b;
-		--border-color: rgba(255, 255, 255, 0.1);
-		--text-primary: #fafafa;
-		--text-secondary: #a1a1aa;
-		--accent-glow: rgba(255, 255, 255, 0.15);
-		--gradient-primary: linear-gradient(135deg, #ffffff 0%, #a1a1aa 100%);
-		--coss-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05), 0 2px 8px -2px rgba(0, 0, 0, 0.5);
+		--bg-color: #FAFAFA;
+		--surface-color: #FFFFFF;
+		--surface-hover: #F0F0F0;
+		--border-color: rgba(0, 0, 0, 0.08);
+		--border-hover: rgba(0, 0, 0, 0.2);
+		--text-primary: #1A1A1A;
+		--text-secondary: #666666;
+		--vercel-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+
+		/* Aarhus Color Palettes */
+		/* Palette 1: Rainbow & Concrete (ARoS Modernism) */
+		--aros-primary: #E07A5F;
+		--aros-secondary: #F2CC8F;
+		--aros-accent: #8ECAE6;
+		--aros-bg: #F8F6F0;
+		--aros-text: #2B2D42;
+
+		/* Palette 2: Møllestien & Den Gamle By (Historic Heritage) */
+		--heritage-primary: #D48C84;
+		--heritage-secondary: #A3B18A;
+		--heritage-accent: #E0A96D;
+		--heritage-bg: #F4F1DE;
+		--heritage-text: #3D405B;
+
+		/* Palette 3: Dokk1 & The Bay (Nordic Coastal Minimalism) */
+		--coastal-primary: #2A6F97;
+		--coastal-secondary: #A8DADC;
+		--coastal-accent: #E9C46A;
+		--coastal-bg: #F1FAEE;
+		--coastal-text: #1D3557;
 	}
 
 	* {
@@ -125,8 +146,15 @@ const { title, description = "Latest web platform features." } = Astro.props;
 	}
 
 	h1, h2, h3, h4, h5, h6 {
-		font-family: 'Outfit', sans-serif;
-		letter-spacing: -0.02em;
+		font-family: 'Inter', sans-serif;
+		letter-spacing: -0.03em;
+		font-weight: 600;
+	}
+
+	/* Accessibility: Focus Outlines */
+	*:focus-visible {
+		outline: 2px solid var(--text-primary);
+		outline-offset: 2px;
 	}
 
 	/* Custom Scrollbar */
@@ -137,10 +165,10 @@ const { title, description = "Latest web platform features." } = Astro.props;
 		background: var(--bg-color); 
 	}
 	::-webkit-scrollbar-thumb {
-		background: rgba(255, 255, 255, 0.15); 
+		background: rgba(0, 0, 0, 0.15); 
 		border-radius: 4px;
 	}
 	::-webkit-scrollbar-thumb:hover {
-		background: rgba(255, 255, 255, 0.25); 
+		background: rgba(0, 0, 0, 0.25); 
 	}
 </style>

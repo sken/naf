@@ -1,46 +1,75 @@
-# Astro Starter Kit: Basics
+# Naf - Frontend Ecosystem Dashboard
 
-```sh
-npm create astro@latest -- --template basics
+Naf is a lightning-fast, statically generated discovery dashboard that tracks multiple vectors of the frontend ecosystem, including industry news, GitHub trending repositories, and browser platform updates.
+
+It executes server-side data fetching entirely at build-time to avoid API rate limits, ensuring instant client-side loads while remaining perfectly optimized for zero-config deployments.
+
+## ✨ Features
+
+- **Unified Bento Grid:** A dynamic, masonry-style layout powered by CSS Grid `dense` and container queries. Cards intelligently size themselves based on their content weight.
+- **Aarhus Light Design System:** A premium, colorful Nordic aesthetic utilizing three custom palettes (ARoS Modernism, Historic Heritage, Coastal Minimalism).
+- **Butter-Smooth Filtering:** Client-side category filtering powered entirely by the native `View Transitions API` for seamless DOM morphing.
+- **Fair Representation RSS:** An algorithmic ingest engine that guarantees representation from every defined RSS source to prevent high-volume publishers from dominating the feed.
+- **Persistent Bookmarks:** A built-in, serverless capability to securely save cards directly to a Redis database via hybrid API endpoints.
+
+## 🛠 Tech Stack
+
+- **Framework:** [Astro](https://astro.build) (SSG with Hybrid API Routes)
+- **Styling:** Vanilla CSS (Zero external CSS frameworks)
+- **Database:** Redis (via `ioredis`)
+- **Package Manager:** `pnpm` (Strictly enforced)
+
+## 🚀 Quick Start
+
+### 1. Installation
+Clone the repository and install dependencies strictly using `pnpm`:
+
+```bash
+git clone https://github.com/skendlba/naf.git
+cd naf
+pnpm install
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+### 2. Environment Variables
+To enable the persistent bookmarking feature, create a `.env.local` file in the root of the project with your Redis connection string and a custom admin PIN:
 
-## 🚀 Project Structure
-
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-/
-├── public/
-│   └── favicon.svg
-├── src
-│   ├── assets
-│   │   └── astro.svg
-│   ├── components
-│   │   └── Welcome.astro
-│   ├── layouts
-│   │   └── Layout.astro
-│   └── pages
-│       └── index.astro
-└── package.json
+```env
+REDIS_URL="redis://your-redis-database-url:port"
+ADMIN_PIN="1234" # Used to authorize saves from the frontend
 ```
 
-To learn more about the folder structure of an Astro project, refer to [our guide on project structure](https://docs.astro.build/en/basics/project-structure/).
+### 3. Development
+Start the local Astro development server:
 
-## 🧞 Commands
+```bash
+pnpm run dev
+```
 
-All commands are run from the root of the project, from a terminal:
+Visit `http://localhost:4300` in your browser.
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+## ⚙️ Configuration (`naf.config.json`)
 
-## 👀 Want to learn more?
+Naf is designed to be a "Zero-Config" deployment. There is no database required for the core dashboard, no complex authentication, and no SSR admin panels. 
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+The entire dashboard is driven by a single local JSON file: `naf.config.json`.
+To add a new RSS feed, track a new GitHub handle, or update layout constraints, simply modify this file. The Astro build step will automatically ingest the new sources.
+
+```json
+{
+  "limits": {
+    "totalNews": 36,
+    "githubTrending": 12,
+    "githubStarred": 6
+  },
+  "sources": [
+    {
+      "name": "Smashing Magazine",
+      "url": "https://www.smashingmagazine.com/feed/"
+    }
+  ]
+}
+```
+
+## 📝 License
+
+MIT
