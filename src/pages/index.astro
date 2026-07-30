@@ -258,12 +258,17 @@ starredItems.forEach((item, i) => {
 				</header>
 
 				<div class="filter-container">
-					<div class="filter-pills">
-						<button class="master-filter active sound-trigger" data-filter="all">All Signals</button>
-						<button class="master-filter filter-articles sound-trigger" data-filter="articles">Articles</button>
-						<button class="master-filter filter-repos sound-trigger" data-filter="repos">Repositories</button>
-						<button class="master-filter filter-platform sound-trigger" data-filter="platform">Platform Updates</button>
-						<button class="master-filter filter-saved sound-trigger" data-filter="saved">Saved</button>
+					<div class="filter-header">
+						<div class="filter-pills">
+							<button class="master-filter active sound-trigger" data-filter="all">All Signals</button>
+							<button class="master-filter filter-articles sound-trigger" data-filter="articles">Articles</button>
+							<button class="master-filter filter-repos sound-trigger" data-filter="repos">Repositories</button>
+							<button class="master-filter filter-platform sound-trigger" data-filter="platform">Platform Updates</button>
+						</div>
+						<button class="saved-toggle sound-trigger" id="savedToggle" title="View Saved Cards">
+							<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+							Saved
+						</button>
 					</div>
 
 					<div class="sub-filter-pills" data-parent="articles" style="display: none;">
@@ -323,12 +328,17 @@ starredItems.forEach((item, i) => {
 	const filters = document.querySelectorAll('.master-filter');
 	const subFilters = document.querySelectorAll('.sub-filter');
 	const subFilterRows = document.querySelectorAll('.sub-filter-pills');
+	const savedToggle = document.getElementById('savedToggle');
 	let activeCategory = 'all';
 	let activeSubcategory = 'all';
+	let isSavedViewActive = false;
 
 	const updateDOM = async () => {
-		if (activeCategory === 'saved') {
+		if (isSavedViewActive) {
 			await window.loadSavedCards();
+		} else {
+			// Clean up dynamically injected saved cards when disabling the view
+			document.querySelectorAll('.reel-item[data-is-saved-card="true"]').forEach(el => el.remove());
 		}
 		
 		const currentItems = document.querySelectorAll('.reel-item:not(.intro-slide)');
@@ -336,11 +346,13 @@ starredItems.forEach((item, i) => {
 			const htmlItem = item as HTMLElement;
 			const itemCat = htmlItem.dataset.category;
 			const itemSub = htmlItem.dataset.subcategory;
+			const isSavedCard = htmlItem.dataset.isSavedCard === 'true';
 			
 			const catMatch = activeCategory === 'all' || itemCat === activeCategory;
-			const subMatch = activeCategory === 'saved' || activeCategory === 'all' || activeSubcategory === 'all' || itemSub === activeSubcategory;
+			const subMatch = activeCategory === 'all' || activeSubcategory === 'all' || itemSub === activeSubcategory;
+			const viewMatch = isSavedViewActive ? isSavedCard : !isSavedCard;
 
-			if (catMatch && subMatch) {
+			if (catMatch && subMatch && viewMatch) {
 				htmlItem.style.display = 'flex';
 			} else {
 				htmlItem.style.display = 'none';
@@ -396,6 +408,16 @@ starredItems.forEach((item, i) => {
 		});
 	});
 
+	savedToggle?.addEventListener('click', () => {
+		isSavedViewActive = !isSavedViewActive;
+		if (isSavedViewActive) {
+			savedToggle.classList.add('active');
+		} else {
+			savedToggle.classList.remove('active');
+		}
+		triggerTransition();
+	});
+
 	window.saveCard = async (element) => {
 		let pin = localStorage.getItem('naf_admin_pin');
 		if (!pin) {
@@ -433,7 +455,7 @@ starredItems.forEach((item, i) => {
 			
 			if (isCurrentlySaved) {
 			    svg.style.fill = 'none';
-			    if (element.dataset.category === 'saved') {
+			    if (isSavedViewActive && element.dataset.isSavedCard === 'true') {
 			        element.style.display = 'none'; // Hide it visually immediately from the saved view
 			    }
 			} else {
@@ -470,8 +492,9 @@ starredItems.forEach((item, i) => {
 			cards.forEach((item, i) => {
 				const li = document.createElement('li');
 				li.className = `reel-item type-${item.type}`;
-				li.dataset.category = 'saved';
-				li.dataset.subcategory = 'all'; // So it matches
+				li.dataset.category = item.category;
+				li.dataset.subcategory = item.subcategory;
+				li.dataset.isSavedCard = 'true';
 				li.dataset.payload = encodeURIComponent(JSON.stringify(item));
 				
 				const d = item.data;
@@ -498,6 +521,52 @@ starredItems.forEach((item, i) => {
 			});
 		} catch(e) { console.error(e); }
 	};
+
+	const feed = document.querySelector('.reel-feed');
+	if (feed && window.matchMedia('(hover: hover)').matches) {
+		let rafId = null;
+
+		feed.addEventListener('mousemove', (e) => {
+			const item = (e.target as HTMLElement).closest('.reel-item');
+			if (!item || item.classList.contains('intro-slide')) return;
+
+			if (rafId) cancelAnimationFrame(rafId);
+
+			rafId = requestAnimationFrame(() => {
+				const rect = item.getBoundingClientRect();
+				const x = (e.clientX - rect.left) / rect.width;
+				const y = (e.clientY - rect.top) / rect.height;
+
+				const rotateY = (x - 0.5) * 10; 
+				const rotateX = (0.5 - y) * 10;
+
+				const wrapper = item.querySelector('.reel-card-wrapper') as HTMLElement;
+				if (wrapper) {
+					wrapper.style.setProperty('--mouse-x', `${x * 100}%`);
+					wrapper.style.setProperty('--mouse-y', `${y * 100}%`);
+					wrapper.style.setProperty('--rotate-x', `${rotateX}deg`);
+					wrapper.style.setProperty('--rotate-y', `${rotateY}deg`);
+					wrapper.style.setProperty('--scale', `1.02`);
+				}
+			});
+		});
+
+		feed.addEventListener('mouseout', (e) => {
+			const item = (e.target as HTMLElement).closest('.reel-item');
+			if (!item || item.classList.contains('intro-slide')) return;
+			
+			const relatedTarget = e.relatedTarget as HTMLElement;
+			if (relatedTarget && item.contains(relatedTarget)) return;
+
+			if (rafId) cancelAnimationFrame(rafId);
+			const wrapper = item.querySelector('.reel-card-wrapper') as HTMLElement;
+			if (wrapper) {
+				wrapper.style.setProperty('--rotate-x', `0deg`);
+				wrapper.style.setProperty('--rotate-y', `0deg`);
+				wrapper.style.setProperty('--scale', `1`);
+			}
+		});
+	}
 </script>
 
 <style is:global>
@@ -549,6 +618,57 @@ starredItems.forEach((item, i) => {
 		margin-bottom: 3rem;
 		width: 100%;
 		gap: 1rem;
+	}
+
+	.filter-header {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1.5rem;
+		width: 100%;
+	}
+	
+	@media (min-width: 768px) {
+		.filter-header {
+			flex-direction: row;
+			justify-content: center;
+			position: relative;
+		}
+		
+		.saved-toggle {
+			position: absolute;
+			right: 0;
+		}
+	}
+
+	.saved-toggle {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 1rem;
+		background: transparent;
+		border: 1px solid var(--border-color);
+		color: var(--text-secondary);
+		border-radius: 9999px;
+		font-weight: 500;
+		font-size: 0.9rem;
+		cursor: pointer;
+		transition: all 0.2s ease;
+	}
+
+	.saved-toggle:hover {
+		border-color: var(--text-secondary);
+		color: var(--text-primary);
+	}
+
+	.saved-toggle.active {
+		background: var(--aros-bg);
+		color: var(--aros-primary);
+		border-color: var(--aros-primary);
+	}
+
+	.saved-toggle.active svg {
+		fill: var(--aros-primary);
 	}
 
 	.filter-pills {
@@ -637,11 +757,7 @@ starredItems.forEach((item, i) => {
 		border-color: var(--coastal-primary);
 	}
 
-	.master-filter.filter-saved.active {
-		background: var(--aros-bg);
-		color: var(--aros-primary);
-		border-color: var(--aros-primary);
-	}
+
 
 	/* REEL FEED SYSTEM - RESPONSIVE */
 	.reel-feed {
@@ -650,6 +766,7 @@ starredItems.forEach((item, i) => {
 		column-count: 3;
 		column-gap: 2rem;
 		list-style: none;
+		perspective: 1200px;
 	}
 
 	@media (max-width: 1024px) {
@@ -680,7 +797,36 @@ starredItems.forEach((item, i) => {
 		background: var(--card-bg);
 		border: 1px solid var(--card-border);
 		box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+		
+		transform-style: preserve-3d;
+		transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		transform: rotateX(var(--rotate-x, 0deg)) rotateY(var(--rotate-y, 0deg)) scale3d(var(--scale, 1), var(--scale, 1), var(--scale, 1));
 	}
+
+	.reel-card-wrapper::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		background: radial-gradient(
+			circle at var(--mouse-x, 50%) var(--mouse-y, 50%), 
+			var(--glow-color, rgba(0,0,0,0)) 0%, 
+			transparent 80%
+		);
+		opacity: 0;
+		transition: opacity 0.3s ease;
+		mix-blend-mode: multiply;
+		z-index: 10;
+	}
+
+	.reel-item:hover .reel-card-wrapper::after {
+		opacity: 1;
+	}
+
+	.type-news .reel-card-wrapper { --glow-color: rgba(222, 130, 109, 0.35); }
+	.type-github .reel-card-wrapper { --glow-color: rgba(189, 163, 169, 0.35); }
+	.type-chrome .reel-card-wrapper { --glow-color: rgba(107, 135, 163, 0.35); }
+	.type-dev .reel-card-wrapper { --glow-color: rgba(222, 130, 109, 0.35); }
 
 	.reel-card-wrapper > a {
 		flex: 1;
