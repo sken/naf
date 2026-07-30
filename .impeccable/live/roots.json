@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "appRoot": "/Users/stefan.kendlbacher/skendlba/web-trends",
+  "repoRoot": "/Users/stefan.kendlbacher/skendlba/web-trends",
+  "contextRoot": "/Users/stefan.kendlbacher/skendlba/web-trends",
+  "sessionRoot": "/Users/stefan.kendlbacher/skendlba/web-trends/.impeccable/live",
+  "productPath": "/Users/stefan.kendlbacher/skendlba/web-trends/PRODUCT.md",
+  "designPath": "/Users/stefan.kendlbacher/skendlba/web-trends/DESIGN.md",
+  "resolvedFrom": "cwd"
+}

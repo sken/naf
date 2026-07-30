@@ -40,6 +40,15 @@ try {
       const feed = await parser.parseURL(source.url);
       let filteredItems = feed.items;
 
+      // Filter out coupons/promos from Wired
+      if (source.name.startsWith('Wired') || source.name.includes('Wired')) {
+        filteredItems = filteredItems.filter(item => {
+          if (!item.title) return false;
+          const lowerTitle = item.title.toLowerCase();
+          return !lowerTitle.includes('coupon') && !lowerTitle.includes('promo') && !lowerTitle.includes('codes');
+        });
+      }
+
       // Filter Medium articles to ONLY English and high signal
       if (source.name.startsWith('Medium')) {
         // Exclude Cyrillic, CJK, Arabic, etc.
@@ -143,8 +152,9 @@ try {
         full_name: repo.full_name,
         html_url: repo.html_url,
         description: repo.description,
-        language: repo.language || 'Starred',
-        stargazers_count: repo.stargazers_count
+        language: repo.language || 'Unknown',
+        stargazers_count: repo.stargazers_count,
+        isStarred: true
       });
     });
   }
@@ -184,10 +194,14 @@ try {
 
 // Combine essential items into the unified canvas (NPM stats moved to footer)
 const allItems = [
-  ...newsItems.map(n => ({ type: 'news', category: 'articles', data: n })),
-  ...githubRepos.map(r => ({ type: 'github', category: 'repos', data: r })),
-  ...features.map(f => ({ type: 'chrome', category: 'platform', data: f })),
-  ...devItems.map(d => ({ type: 'dev', category: 'articles', data: d }))
+  ...newsItems.map(n => {
+     let sub = n.source.toLowerCase().replace(/[^a-z0-9]/g, '');
+     if (n.source.includes('Medium')) sub = 'medium';
+     return { type: 'news', category: 'articles', subcategory: sub, data: n };
+  }),
+  ...githubRepos.map(r => ({ type: 'github', category: 'repos', subcategory: r.isStarred ? 'starred' : 'trending', data: r })),
+  ...features.map(f => ({ type: 'chrome', category: 'platform', subcategory: 'all', data: f })),
+  ...devItems.map(d => ({ type: 'dev', category: 'articles', subcategory: 'devto', data: d }))
 ];
 
 // Phase 1: Intelligent Sizing Algorithm
@@ -219,7 +233,7 @@ function getSpanClass(item: any) {
 
 // Shuffle array deterministically for the build
 let shuffled = allItems.filter(i => !(i.type === 'github' && i.data.language === 'Starred')).sort(() => 0.5 - Math.random());
-const starredItems = allItems.filter(i => i.type === 'github' && i.data.language === 'Starred');
+const starredItems = allItems.filter(i => i.type === 'github' && i.data.isStarred);
 
 // Ensure starred repos are ALWAYS prominently included near the top of the canvas
 starredItems.forEach((item, i) => {
@@ -251,6 +265,20 @@ starredItems.forEach((item, i) => {
 						<button class="master-filter filter-platform sound-trigger" data-filter="platform">Platform Updates</button>
 						<button class="master-filter filter-saved sound-trigger" data-filter="saved">Saved</button>
 					</div>
+
+					<div class="sub-filter-pills" data-parent="articles" style="display: none;">
+						<button class="sub-filter active sound-trigger" data-subfilter="all">All Articles</button>
+						<button class="sub-filter sound-trigger" data-subfilter="devto">Dev.to</button>
+						<button class="sub-filter sound-trigger" data-subfilter="medium">Medium</button>
+						{Array.from(new Set(config.rssSources.filter(s => !s.name.includes('Medium')).map(s => s.name))).map(name => (
+							<button class="sub-filter sound-trigger" data-subfilter={name.toLowerCase().replace(/[^a-z0-9]/g, '')}>{name}</button>
+						))}
+					</div>
+					<div class="sub-filter-pills" data-parent="repos" style="display: none;">
+						<button class="sub-filter active sound-trigger" data-subfilter="all">All Repos</button>
+						<button class="sub-filter sound-trigger" data-subfilter="trending">Trending</button>
+						<button class="sub-filter sound-trigger" data-subfilter="starred">My Stars</button>
+					</div>
 				</div>
 			</li>
 
@@ -260,6 +288,7 @@ starredItems.forEach((item, i) => {
 					<li 
 						class={`reel-item type-${item.type}`} 
 						data-category={item.category}
+						data-subcategory={item.subcategory}
 						data-payload={encodeURIComponent(JSON.stringify(item))}
 					>
 						<div class="reel-card-wrapper">
@@ -292,7 +321,40 @@ starredItems.forEach((item, i) => {
 
 <script>
 	const filters = document.querySelectorAll('.master-filter');
-	const items = document.querySelectorAll('.reel-item:not(.intro-slide)');
+	const subFilters = document.querySelectorAll('.sub-filter');
+	const subFilterRows = document.querySelectorAll('.sub-filter-pills');
+	let activeCategory = 'all';
+	let activeSubcategory = 'all';
+
+	const updateDOM = async () => {
+		if (activeCategory === 'saved') {
+			await window.loadSavedCards();
+		}
+		
+		const currentItems = document.querySelectorAll('.reel-item:not(.intro-slide)');
+		currentItems.forEach(item => {
+			const htmlItem = item as HTMLElement;
+			const itemCat = htmlItem.dataset.category;
+			const itemSub = htmlItem.dataset.subcategory;
+			
+			const catMatch = activeCategory === 'all' || itemCat === activeCategory;
+			const subMatch = activeCategory === 'saved' || activeCategory === 'all' || activeSubcategory === 'all' || itemSub === activeSubcategory;
+
+			if (catMatch && subMatch) {
+				htmlItem.style.display = 'flex';
+			} else {
+				htmlItem.style.display = 'none';
+			}
+		});
+	};
+
+	const triggerTransition = () => {
+		if (document.startViewTransition) {
+			document.startViewTransition(updateDOM);
+		} else {
+			updateDOM();
+		}
+	};
 
 	filters.forEach(filter => {
 		filter.addEventListener('click', (e) => {
@@ -300,31 +362,37 @@ starredItems.forEach((item, i) => {
 			const clickedPill = e.target as HTMLButtonElement;
 			clickedPill.classList.add('active');
 
-			const filterCategory = clickedPill.dataset.filter;
-			
-			const updateDOM = async () => {
-				if (filterCategory === 'saved') {
-					await window.loadSavedCards();
-				}
-				
-				// Re-query items since we might have injected new ones
-				const currentItems = document.querySelectorAll('.reel-item:not(.intro-slide)');
-				currentItems.forEach(item => {
-					const htmlItem = item as HTMLElement;
-					if (filterCategory === 'all' || htmlItem.dataset.category === filterCategory) {
-						htmlItem.style.display = 'flex';
-					} else {
-						htmlItem.style.display = 'none';
-					}
-				});
-			};
+			activeCategory = clickedPill.dataset.filter;
+			activeSubcategory = 'all';
 
-			// Phase 3: Butter-smooth Grid Layout Animations
-			if (document.startViewTransition) {
-				document.startViewTransition(updateDOM);
-			} else {
-				updateDOM();
-			}
+			// Toggle sub-filters
+			subFilterRows.forEach(row => {
+				const htmlRow = row as HTMLElement;
+				if (htmlRow.dataset.parent === activeCategory) {
+					htmlRow.style.display = 'flex';
+					// Reset visual active state to "All"
+					htmlRow.querySelectorAll('.sub-filter').forEach(btn => {
+						if ((btn as HTMLElement).dataset.subfilter === 'all') btn.classList.add('active');
+						else btn.classList.remove('active');
+					});
+				} else {
+					htmlRow.style.display = 'none';
+				}
+			});
+
+			triggerTransition();
+		});
+	});
+
+	subFilters.forEach(filter => {
+		filter.addEventListener('click', (e) => {
+			const clickedPill = e.target as HTMLButtonElement;
+			const parentRow = clickedPill.closest('.sub-filter-pills');
+			parentRow.querySelectorAll('.sub-filter').forEach(f => f.classList.remove('active'));
+			clickedPill.classList.add('active');
+
+			activeSubcategory = clickedPill.dataset.subfilter;
+			triggerTransition();
 		});
 	});
 
@@ -337,12 +405,18 @@ starredItems.forEach((item, i) => {
 		}
 
 		const btn = element.querySelector('.save-btn');
-		btn.style.stroke = 'var(--aros-primary)';
+		const svg = btn.querySelector('svg');
+		
+		const isCurrentlySaved = svg.style.fill === 'var(--aros-primary)' || 
+		                         svg.getAttribute('fill') === 'var(--aros-primary)' || 
+		                         element.dataset.category === 'saved';
+		                         
+		const method = isCurrentlySaved ? 'DELETE' : 'POST';
 		
 		try {
 			const payload = JSON.parse(decodeURIComponent(element.dataset.payload));
 			const res = await fetch('/api/saved', {
-				method: 'POST',
+				method: method,
 				headers: {
 					'Content-Type': 'application/json',
 					'Authorization': `Bearer ${pin}`
@@ -356,10 +430,19 @@ starredItems.forEach((item, i) => {
 				}
 				throw new Error("Failed to save");
 			}
-			btn.style.fill = 'var(--aros-primary)';
+			
+			if (isCurrentlySaved) {
+			    svg.style.fill = 'none';
+			    if (element.dataset.category === 'saved') {
+			        element.style.display = 'none'; // Hide it visually immediately from the saved view
+			    }
+			} else {
+			    svg.style.fill = 'var(--aros-primary)';
+			    svg.style.stroke = 'var(--aros-primary)';
+			}
 		} catch (e) {
 			console.error(e);
-			btn.style.stroke = 'red';
+			svg.style.stroke = 'red';
 		}
 	};
 
@@ -378,22 +461,37 @@ starredItems.forEach((item, i) => {
 			if (!res.ok) return;
 			const cards = await res.json();
 			
-			const grid = document.querySelector('.bento-grid');
+			const grid = document.querySelector('.reel-feed');
+			if (!grid) return;
+			
 			// Remove previously injected saved cards
-			document.querySelectorAll('.bento-item[data-category="saved"]').forEach(el => el.remove());
+			document.querySelectorAll('.reel-item[data-category="saved"]').forEach(el => el.remove());
 			
 			cards.forEach((item, i) => {
 				const li = document.createElement('li');
-				li.className = `bento-item type-${item.type}`;
+				li.className = `reel-item type-${item.type}`;
 				li.dataset.category = 'saved';
+				li.dataset.subcategory = 'all'; // So it matches
+				li.dataset.payload = encodeURIComponent(JSON.stringify(item));
 				
 				const d = item.data;
 				let innerHTML = '';
 				
-				if (item.type === 'news') innerHTML = `<a href="${d.link}" class="card-link" target="_blank"><article class="news-card"><header class="meta"><span class="source">${d.source}</span></header><h3 class="title" style="margin-top:0.5rem;font-size:1.5rem;font-weight:600;">${d.title}</h3></article></a>`;
-				if (item.type === 'dev') innerHTML = `<a href="${d.url}" class="card-link" target="_blank"><article class="dev-card"><header class="meta"><span class="author">${d.author}</span><span class="reactions">❤️ ${d.reactions}</span></header><h3 class="title" style="margin-top:0.5rem;font-size:1.5rem;font-weight:600;">${d.title}</h3></article></a>`;
-				if (item.type === 'github') innerHTML = `<a href="${d.html_url}" class="card-link" target="_blank"><article class="repo-card"><header class="repo-header" style="display:flex;justify-content:space-between;"><h3>${d.full_name}</h3><span class="stars">⭐ ${d.stargazers_count}</span></header><p class="description" style="margin-top:0.5rem;color:var(--text-secondary);">${d.description || ''}</p></article></a>`;
-				if (item.type === 'chrome') innerHTML = `<div class="feature-card"><header class="feature-header"><h3>${d.name}</h3></header><p class="summary" style="margin-top:0.5rem;color:var(--text-secondary);">${d.summary}</p></div>`;
+				const saveBtnHTML = `<button class="save-btn" title="Unsave" onclick="window.saveCard(this.closest('.reel-item'))"><svg viewBox="0 0 24 24" width="24" height="24" stroke="var(--aros-primary)" stroke-width="2" fill="var(--aros-primary)"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></button>`;
+				
+				if (item.type === 'news') {
+					innerHTML = `<div class="reel-card-wrapper">${saveBtnHTML}<a href="${d.link}" target="_blank" rel="noopener noreferrer" class="news-card sound-trigger"><div class="content-overlay"><div class="meta"><span class="source">${d.source}</span><span class="date">${d.date}</span></div><h3>${d.title}</h3></div></a></div>`;
+				}
+				if (item.type === 'dev') {
+					innerHTML = `<div class="reel-card-wrapper">${saveBtnHTML}<a href="${d.url}" target="_blank" rel="noopener noreferrer" class="dev-card sound-trigger"><div class="content-overlay"><div class="card-header"><span class="author">${d.author}</span><span class="reactions">❤️ ${d.reactions}</span></div><h3>${d.title}</h3></div></a></div>`;
+				}
+				if (item.type === 'github') {
+					innerHTML = `<div class="reel-card-wrapper">${saveBtnHTML}<a href="${d.html_url}" target="_blank" rel="noopener noreferrer" class="repo-card sound-trigger"><div class="content-overlay"><div class="card-header"><span class="language">${d.language}</span><span class="stars">⭐ ${d.stargazers_count}</span></div><h3>${d.full_name}</h3><p>${d.description || ''}</p></div></a></div>`;
+				}
+				if (item.type === 'chrome') {
+					const statusText = d.browsers?.chrome?.status?.text || "In Development";
+					innerHTML = `<div class="reel-card-wrapper">${saveBtnHTML}<a href="https://chromestatus.com/feature/${d.id}" target="_blank" rel="noopener noreferrer" class="feature-card sound-trigger"><div class="content-overlay"><div class="card-header"><span class="category-badge">${d.category}</span><span class="status-indicator"><span class="pulse"></span>${statusText}</span></div><h3>${d.name}</h3><p>${d.summary}</p></div></a></div>`;
+				}
 				
 				li.innerHTML = innerHTML;
 				grid.appendChild(li);
@@ -402,7 +500,7 @@ starredItems.forEach((item, i) => {
 	};
 </script>
 
-<style>
+<style is:global>
 	.dashboard {
 		max-width: 1300px;
 		margin: 0 auto;
@@ -446,9 +544,11 @@ starredItems.forEach((item, i) => {
 
 	.filter-container {
 		display: flex;
-		justify-content: center;
+		flex-direction: column;
+		align-items: center;
 		margin-bottom: 3rem;
 		width: 100%;
+		gap: 1rem;
 	}
 
 	.filter-pills {
@@ -456,6 +556,42 @@ starredItems.forEach((item, i) => {
 		flex-wrap: wrap;
 		gap: 0.75rem;
 		justify-content: center;
+	}
+
+	.sub-filter-pills {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+		justify-content: center;
+		animation: slideDown 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	.sub-filter {
+		background: transparent;
+		border: 1px solid rgba(0, 0, 0, 0.1);
+		color: var(--text-secondary);
+		padding: 0.4rem 1rem;
+		border-radius: 9999px;
+		font-size: 0.85rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.sub-filter:hover {
+		background: rgba(0, 0, 0, 0.03);
+		color: var(--text-primary);
+	}
+
+	.sub-filter.active {
+		background: var(--text-primary);
+		color: #ffffff;
+		border-color: var(--text-primary);
+	}
+
+	@keyframes slideDown {
+		from { opacity: 0; transform: translateY(-8px); }
+		to { opacity: 1; transform: translateY(0); }
 	}
 
 	.master-filter {
@@ -544,6 +680,13 @@ starredItems.forEach((item, i) => {
 		background: var(--card-bg);
 		border: 1px solid var(--card-border);
 		box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+	}
+
+	.reel-card-wrapper > a {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		justify-content: flex-end;
 	}
 
 	/* Forces the inner components (NewsCard, RepoCard, etc) to fully fill the wrapper */

@@ -22,12 +22,12 @@ const formattedStars = new Intl.NumberFormat('en-US').format(stars);
   </div>
 </a>
 
-<style>
+<style is:global>
   .repo-card {
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    height: 100%;
+    flex: 1;
     width: 100%;
     text-decoration: none !important;
     color: var(--card-text);
@@ -40,7 +40,7 @@ const formattedStars = new Intl.NumberFormat('en-US').format(stars);
   }
 
   .content-overlay {
-    padding: 2rem 2rem 3rem 2rem;
+    padding: 3.5rem 4.5rem 3rem 2rem;
   }
 
   .card-header {

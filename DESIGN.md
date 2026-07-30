@@ -32,7 +32,9 @@ The color system avoids stark white and pure black, opting for a softer, organic
   - **Mobile:** A TikTok/Instagram-style single-column Vertical Reel Feed (`100vw`).
 - **Scroll Snapping (Mobile Only):** On mobile, scrolling uses native `scroll-snap-type: y mandatory` and `scroll-snap-align: center` for continuous, snappy content discovery. 
 - **Hidden Scrollbars (Mobile Only):** Scrollbars are hidden via CSS on mobile viewports to emulate native application mechanics.
-- **Filtering:** Client-side filtering is powered by the native `document.startViewTransition()` API via `display: none` manipulation for buttery smooth animations.
+- **Filtering:** 
+  - **Client-Side Filtering:** The dashboard uses the native `document.startViewTransition()` API to animate filtering operations entirely in the browser, eliminating the need for server-side re-renders.
+  - **Two-Tier Architecture:** Selecting a master category (like Articles or Repositories) reveals a contextual secondary row of pill buttons, allowing deeper sub-filtering (e.g., Medium vs Dev.to) without leaving the static page.
 
 ## Components
 **Standard Reel Card (`.reel-item`)**

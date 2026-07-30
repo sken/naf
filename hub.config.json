@@ -1,5 +1,5 @@
 {
-  "githubUser": "skendlba",
+  "githubUser": "sken",
   "limits": {
     "chromeFeatures": 12,
     "rssNews": 36,
@@ -22,7 +22,7 @@
     { "url": "https://uxdesign.cc/feed", "name": "Medium (UX)" },
     { "url": "https://levelup.gitconnected.com/feed", "name": "Medium (Dev)" },
     { "url": "https://towardsdatascience.com/feed", "name": "Medium (AI)" },
-    { "url": "https://github.blog/category/ai/feed/", "name": "GitHub AI" },
+    { "url": "https://github.blog/tag/ai/feed/", "name": "GitHub AI" },
     { "url": "https://www.wired.com/feed/rss", "name": "Wired" },
     { "url": "https://techcrunch.com/feed/", "name": "TechCrunch" },
     { "url": "https://heydesigner.com/feed/", "name": "HeyDesigner" }

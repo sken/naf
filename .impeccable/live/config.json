@@ -1,0 +1,8 @@
+{
+  "files": [
+    "src/layouts/Layout.astro"
+  ],
+  "exclude": [],
+  "insertBefore": "</body>",
+  "commentSyntax": "html"
+}
