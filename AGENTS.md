@@ -29,6 +29,9 @@ Naf is a statically generated discovery dashboard that tracks multiple vectors o
 - **Client Frameworks:** Do not add heavy client-side frameworks (React, Vue, Alpine) unless explicitly requested. Rely on Vanilla JS for interactivity.
 - **Authentication:** The `/api/saved` endpoint requires a Bearer token matching the `ADMIN_PIN` environment variable.
 - **Git Operations:** Always provide a suggested Git commit message for the user when a task is completed. NEVER write or execute any `git commit` or `git add` commands automatically.
+- **Documentation Sync:** When making structural UI changes, adding new features, or changing architectural patterns, you MUST:
+  1. Update the appropriate top-level spec files (`DESIGN.md` or `PRODUCT.md`) to keep them in sync with the codebase.
+  2. Create a new chronological spec file in `docs/superpowers/specs/` (e.g., `YYYY-MM-DD-feature-name.md`) detailing the problem, solution architecture, and affected files.
 
 ## Project Architecture
 - **Zero-Config Data:** The dashboard is driven entirely by a local JSON file (`naf.config.json`). All API endpoints, RSS feeds, and GitHub handles must be read from this file at build time.
@@ -39,14 +42,19 @@ Naf is a statically generated discovery dashboard that tracks multiple vectors o
   - **Platform Updates (Coastal Minimalism):** Fog White backgrounds, Baltic Blue borders.
 
 ## Patterns
-**Standard Bento Card Structure (Astro):**
+**Standard Reel Card Structure (Astro):**
 ```html
-<li class="bento-item span-2 type-github" data-category="repos" data-payload={encodeURIComponent(JSON.stringify(item))}>
-    <button class="save-btn" onclick="window.saveCard(this.parentElement)">
-        <svg><!-- Bookmark Icon --></svg>
-    </button>
-    <article class="repo-card">
-        <!-- Content -->
-    </article>
+<li class="reel-item type-github" data-category="repos" data-subcategory="trending" data-payload={encodeURIComponent(JSON.stringify(item))}>
+    <div class="reel-card-wrapper">
+        <button class="save-btn" onclick="window.saveCard(this.closest('.reel-item'))">
+            <svg><!-- Bookmark Icon --></svg>
+        </button>
+        <RepoCard {...item.data} />
+    </div>
 </li>
 ```
+
+## Known Gotchas
+- **Dynamic HTML & CSS Scoping:** When injecting HTML dynamically via Vanilla JS (e.g., in `window.loadSavedCards`), the standard Astro hashed-class scoping will fail to match the new elements. You must use `<style is:global>` for any component styles that need to apply to dynamically injected DOM nodes.
+- **Redis JSON Deletion:** When using `ioredis` with Vercel KV, `lrem` will often fail to delete serialized JSON strings due to JSON key-ordering drift. To reliably delete a saved card, you must parse the list, filter out the target object by ID, and rewrite the list.
+- **Event Listeners in Injected HTML:** When creating inline event handlers in template literals (e.g., `onclick="window.saveCard(this.closest('.reel-item'))"`), ensure you are passing the correct DOM element that holds the `data-payload` attribute to prevent `undefined` JSON parsing errors.

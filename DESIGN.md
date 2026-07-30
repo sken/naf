@@ -35,6 +35,7 @@ The color system avoids stark white and pure black, opting for a softer, organic
 - **Filtering:** 
   - **Client-Side Filtering:** The dashboard uses the native `document.startViewTransition()` API to animate filtering operations entirely in the browser, eliminating the need for server-side re-renders.
   - **Two-Tier Architecture:** Selecting a master category (like Articles or Repositories) reveals a contextual secondary row of pill buttons, allowing deeper sub-filtering (e.g., Medium vs Dev.to) without leaving the static page.
+  - **Orthogonal State (Saved):** The "Saved" filter acts as an independent, global toggle button rather than a mutually-exclusive master category. This allows users to cross-filter their saved items (e.g., viewing "Only saved Articles" by turning on the toggle and selecting the Articles master category).
 
 ## Components
 **Standard Reel Card (`.reel-item`)**
