@@ -567,6 +567,16 @@ starredItems.forEach((item, i) => {
 			}
 		});
 	}
+	// SVG filter injection for wobbly dotted borders
+	const svgFilterHTML = `
+		<svg width="0" height="0" style="position:absolute; width:0; height:0;">
+			<filter id="wobbly-border">
+				<feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" result="noise" />
+				<feDisplacementMap in="SourceGraphic" in2="noise" scale="3" xChannelSelector="R" yChannelSelector="G" />
+			</filter>
+		</svg>
+	`;
+	document.body.insertAdjacentHTML('beforeend', svgFilterHTML);
 </script>
 
 <style is:global>
@@ -795,12 +805,22 @@ starredItems.forEach((item, i) => {
 		border-radius: 16px;
 		overflow: hidden;
 		background: var(--card-bg);
-		border: 1px solid var(--card-border);
 		box-shadow: 0 10px 30px rgba(0,0,0,0.05);
 		
 		transform-style: preserve-3d;
 		transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 		transform: rotateX(var(--rotate-x, 0deg)) rotateY(var(--rotate-y, 0deg)) scale3d(var(--scale, 1), var(--scale, 1), var(--scale, 1));
+	}
+
+	.reel-card-wrapper::before {
+		content: '';
+		position: absolute;
+		inset: -1px;
+		pointer-events: none;
+		border: 2px dotted rgba(26, 26, 36, 0.25);
+		border-radius: 16px;
+		filter: url(#wobbly-border);
+		z-index: 15;
 	}
 
 	.reel-card-wrapper::after {
@@ -836,8 +856,8 @@ starredItems.forEach((item, i) => {
 	}
 
 	/* Forces the inner components (NewsCard, RepoCard, etc) to fully fill the wrapper */
-	.reel-card-wrapper > :global(a),
-	.reel-card-wrapper > :global(div.feature-card) {
+	.reel-card-wrapper > a,
+	.reel-card-wrapper > div.feature-card {
 		flex: 1;
 		display: flex;
 	}
@@ -851,7 +871,7 @@ starredItems.forEach((item, i) => {
 
 	/* Mobile Native Reel Experience */
 	@media (max-width: 768px) {
-		:global(body) {
+		body {
 			overflow: hidden;
 		}
 		.dashboard {

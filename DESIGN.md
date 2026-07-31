@@ -40,6 +40,6 @@ The color system avoids stark white and pure black, opting for a softer, organic
 ## Components
 **Standard Reel Card (`.reel-item`)**
 - Must include a clean, accessible save/bookmark button absolutely positioned without obscuring metadata.
-- **Visuals:** Cards simulate full-screen media using `radial-gradient` backgrounds mapped to thematic color glow variables. 
+- **Visuals:** Cards simulate full-screen media using `radial-gradient` backgrounds mapped to thematic color glow variables, and feature an organic, hand-drawn wobbly dotted border powered by CSS `border: dotted` combined with a native SVG `feDisplacementMap` filter to match the ink-and-watercolor brand. 
 - **Content:** Text and metadata are overlaid at the bottom using `justify-content: flex-end`.
 - **Performance:** Implements `content-visibility: auto` to optimize rendering of off-screen items in the infinite feed.
