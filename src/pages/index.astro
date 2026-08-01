@@ -241,6 +241,13 @@ starredItems.forEach((item, i) => {
   shuffled.splice(insertIndex, 0, item);
 });
 
+const buildTime = new Date().toLocaleString('en-US', { 
+  month: 'short', 
+  day: 'numeric', 
+  hour: 'numeric', 
+  minute: '2-digit', 
+  timeZoneName: 'short' 
+});
 ---
 
 <Layout title="Hub by Stefan Kendlbacher | Web Trends Dashboard">
@@ -252,7 +259,7 @@ starredItems.forEach((item, i) => {
 			<!-- Intro Slide with Hero and Filters -->
 			<li class="reel-item intro-slide">
 				<header class="hero">
-					<div class="badge">hub.skendlba.dev</div>
+					<div class="badge">hub.skendlba.dev &bull; Updated {buildTime}</div>
 					<h1><HubLogo /></h1>
 					<p>All the frontend signals you (or at least me) care about, minus the 45 open browser tabs.</p>
 				</header>
