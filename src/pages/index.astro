@@ -827,6 +827,12 @@ const buildTime = new Date().toLocaleString('en-US', {
 		position: relative;
 	}
 
+	/* Positioning context for the save button, which must stay outside the tilting wrapper */
+	.reel-card {
+		position: relative;
+		width: 100%;
+	}
+
 	.reel-card-wrapper {
 		width: 100%;
 		height: auto;
@@ -838,7 +844,6 @@ const buildTime = new Date().toLocaleString('en-US', {
 		background: var(--card-bg);
 		box-shadow: 0 10px 30px rgba(0,0,0,0.05);
 		
-		transform-style: preserve-3d;
 		transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 		transform: rotateX(var(--rotate-x, 0deg)) rotateY(var(--rotate-y, 0deg)) scale3d(var(--scale, 1), var(--scale, 1), var(--scale, 1));
 	}
@@ -958,7 +963,7 @@ const buildTime = new Date().toLocaleString('en-US', {
 		box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 	}
 
-	.reel-card-wrapper:hover .save-btn {
+	.reel-card:hover .save-btn {
 		transform: scale(1.05);
 	}
 
@@ -1027,7 +1032,7 @@ const buildTime = new Date().toLocaleString('en-US', {
 			transition: none;
 		}
 		.master-filter:hover,
-		.reel-card-wrapper:hover .save-btn {
+		.reel-card:hover .save-btn {
 			transform: none;
 		}
 		.sub-filter-pills {

@@ -48,11 +48,11 @@ Hub is a statically generated discovery dashboard that tracks multiple vectors o
 **Standard Reel Card (`src/components/ReelItem.astro`):** always render cards through this component; never hand-write the `<li>` shell.
 ```html
 <li class="reel-item type-github" data-category="repos" data-subcategory="trending" data-key="https://github.com/..." data-payload={encodeURIComponent(JSON.stringify(card))}>
-    <div class="reel-card-wrapper">
+    <div class="reel-card">
+        <div class="reel-card-wrapper"><RepoCard ... /></div>
         <button type="button" class="save-btn" aria-label="Save card" aria-pressed="false">
             <svg><!-- Bookmark Icon --></svg>
         </button>
-        <RepoCard ... />
     </div>
 </li>
 ```
@@ -63,6 +63,7 @@ Hub is a statically generated discovery dashboard that tracks multiple vectors o
 - **Never use `innerHTML` with feed data:** Titles, descriptions and links come from third-party feeds and are stored in Redis. Build DOM from `<template>` clones with `textContent`, and pass every URL through `safeUrl` (blocks `javascript:` links). Violating this is a stored-XSS hole that can leak the admin PIN from `localStorage`.
 - **Dynamic HTML & CSS Scoping:** Card component styles must stay `<style is:global>` so they apply to cloned saved cards.
 - **Redis JSON Deletion:** `lrem` with a re-serialized client payload misses due to JSON key-ordering drift. Instead, read the list, match entries by `getCardKey`, and `lrem` each match using its exact stored string. Never `del` + `rpush` the list (not atomic; loses concurrent saves).
+- **Save Button Stacking:** The save button must live *outside* the tilting `.reel-card-wrapper` (as its later sibling inside `.reel-card`), and the wrapper must not use `transform-style: preserve-3d`. 3D-transformed boxes hit-test unreliably: Chromium mis-hit-tests them inside CSS multi-column layouts, and WebKit ignores `z-index` in 3D contexts, so clicks on the bookmark fell through to the full-card link. The tilt only needs `perspective` on `.reel-feed`.
 - **Astro Frontmatter Regexes:** Regex literals containing `<` (e.g. `/</g`) break `astro check` parsing of the whole file; use `encodeURIComponent` or string methods instead.
 - **Legacy `naf` storage keys:** The Redis list `naf:saved_cards` and the `localStorage` key `naf_admin_pin` predate the rename to Hub. Keep them as-is; renaming them would orphan existing bookmarks and stored PINs.
 - **TypeScript Version:** `astro check` needs TypeScript 6.x; TypeScript 7 does not ship the programmatic API yet.
