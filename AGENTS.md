@@ -1,10 +1,10 @@
-# Project: Naf
+# Project: Hub
 
-**Domain:** hub.skendlba.dev (public brand: "Hub by Stefan Kendlbacher"; the project/repo name is Naf)
-**Repository:** sken/naf
+**Domain:** hub.skendlba.dev (public brand: "Hub by Stefan Kendlbacher")
+**Repository:** sken/hub (formerly sken/naf)
 
 ## Overview
-Naf is a statically generated discovery dashboard that tracks multiple vectors of the frontend ecosystem (News, Repos, Chrome Status, NPM). It executes server-side data fetching entirely at build-time to avoid API rate limits and ensure instant client-side loads. 
+Hub is a statically generated discovery dashboard that tracks multiple vectors of the frontend ecosystem (News, Repos, Chrome Status, NPM). It executes server-side data fetching entirely at build-time to avoid API rate limits and ensure instant client-side loads. 
 
 ## Tech Stack
 - **Framework:** Astro 7 (Static Site Generation / SSG with Hybrid API endpoints)
@@ -37,7 +37,7 @@ Naf is a statically generated discovery dashboard that tracks multiple vectors o
 
 ## Project Architecture
 - **Zero-Config Data:** The dashboard is driven entirely by a local JSON file (`hub.config.json`). All API endpoints, RSS feeds, and GitHub handles must be read from this file at build time. An optional `GITHUB_TOKEN` env var raises the GitHub API rate limit.
-- **Parallel, Fault-Tolerant Ingest:** All sources are fetched in parallel with a 15s timeout each. A failing source is logged as `[naf] <source> failed: ...` and contributes no items; it never fails the build.
+- **Parallel, Fault-Tolerant Ingest:** All sources are fetched in parallel with a 15s timeout each. A failing source is logged as `[hub] <source> failed: ...` and contributes no items; it never fails the build.
 - **Fair Representation RSS:** The build step guarantees the 2 newest articles from every successful RSS source, then fills the `rssNews` quota chronologically while capping each source at `rssMaxPerSource` items.
 - **Design System (Aarhus Light Mode):**
   - **Articles (ARoS Modernism):** Birch Milk backgrounds, Soft Terracotta accents.
@@ -64,4 +64,5 @@ Naf is a statically generated discovery dashboard that tracks multiple vectors o
 - **Dynamic HTML & CSS Scoping:** Card component styles must stay `<style is:global>` so they apply to cloned saved cards.
 - **Redis JSON Deletion:** `lrem` with a re-serialized client payload misses due to JSON key-ordering drift. Instead, read the list, match entries by `getCardKey`, and `lrem` each match using its exact stored string. Never `del` + `rpush` the list (not atomic; loses concurrent saves).
 - **Astro Frontmatter Regexes:** Regex literals containing `<` (e.g. `/</g`) break `astro check` parsing of the whole file; use `encodeURIComponent` or string methods instead.
+- **Legacy `naf` storage keys:** The Redis list `naf:saved_cards` and the `localStorage` key `naf_admin_pin` predate the rename to Hub. Keep them as-is; renaming them would orphan existing bookmarks and stored PINs.
 - **TypeScript Version:** `astro check` needs TypeScript 6.x; TypeScript 7 does not ship the programmatic API yet.

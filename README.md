@@ -1,6 +1,6 @@
-# Naf - Frontend Ecosystem Dashboard
+# Hub - Frontend Ecosystem Dashboard
 
-Naf is a lightning-fast, statically generated discovery dashboard that tracks multiple vectors of the frontend ecosystem, including industry news, GitHub trending repositories, and browser platform updates.
+Hub is a lightning-fast, statically generated discovery dashboard that tracks multiple vectors of the frontend ecosystem, including industry news, GitHub trending repositories, and browser platform updates.
 
 It executes server-side data fetching entirely at build-time to avoid API rate limits, ensuring instant client-side loads while remaining perfectly optimized for zero-config deployments.
 
@@ -26,8 +26,8 @@ It executes server-side data fetching entirely at build-time to avoid API rate l
 Clone the repository and install dependencies strictly using `pnpm`:
 
 ```bash
-git clone https://github.com/sken/naf.git
-cd naf
+git clone https://github.com/sken/hub.git
+cd hub
 pnpm install
 ```
 
@@ -57,7 +57,7 @@ pnpm run check
 
 ## ⚙️ Configuration (`hub.config.json`)
 
-Naf is designed to be a "Zero-Config" deployment. There is no database required for the core dashboard, no complex authentication, and no SSR admin panels. 
+Hub is designed to be a "Zero-Config" deployment. There is no database required for the core dashboard, no complex authentication, and no SSR admin panels. 
 
 The entire dashboard is driven by a single local JSON file: `hub.config.json`.
 To add a new RSS feed, track a new GitHub handle, or update layout constraints, simply modify this file. The Astro build step will automatically ingest the new sources.

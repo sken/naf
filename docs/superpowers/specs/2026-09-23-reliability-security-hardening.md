@@ -40,7 +40,7 @@ The `<li>` shell, save button and type-specific card are one component. `index.a
 - `GET` normalizes and de-duplicates legacy rows.
 
 ### 5. Build-time ingest
-- All sources (and all RSS feeds / npm packages within them) are fetched in parallel with a 15s timeout; failures are logged as `[naf] <source> failed: …`. Page prerender dropped from ~10s to ~2–3s.
+- All sources (and all RSS feeds / npm packages within them) are fetched in parallel with a 15s timeout; failures are logged as `[hub] <source> failed: …`. Page prerender dropped from ~10s to ~2–3s.
 - Fair Representation now guarantees the 2 newest items per source, then fills chronologically with a per-source cap (`limits.rssMaxPerSource`, default 6). Links are de-duplicated and undated items sort last instead of corrupting the order.
 - Chrome Status payloads are trimmed to the fields the card uses.
 - An optional `GITHUB_TOKEN` env var authenticates the starred-repos request.

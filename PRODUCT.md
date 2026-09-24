@@ -27,7 +27,7 @@ Users typically check this daily as part of their routine to catch up on fronten
 - **Package Manager:** `pnpm` exclusively.
 
 ## Brand Commitments
-- **Name:** Hub (public brand, served at hub.skendlba.dev); Naf is the project/repository name.
+- **Name:** Hub (served at hub.skendlba.dev; repository `sken/hub`, formerly Naf).
 - **Tone of Voice:** Clever, snappy, and relatable to developers (e.g., "minus the 45 open browser tabs"). Not overly corporate.
 - **Visual Identity:** Aarhus Light Design System. It features a whimsical, hand-drawn ink-and-watercolor aesthetic (inspired by Jakob Martin Strid) with a specific curated palette (Birch Milk, Pale Cobblestone, Fog White, Soft Terracotta, Baltic Blue).
 

@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { getCardKey, normalizeCard } from '../../lib/cards';
 
+// Legacy `naf:` prefix from before the rename to Hub; changing it would orphan existing bookmarks
 const LIST_KEY = 'naf:saved_cards';
 const MAX_BODY_BYTES = 16 * 1024;
 const MAX_AUTH_FAILURES = 10;

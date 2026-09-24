@@ -27,7 +27,7 @@ async function fromSource<T>(name: string, load: () => Promise<T[]>): Promise<T[
 	try {
 		return await load();
 	} catch (e) {
-		console.warn(`[naf] ${name} failed: ${e instanceof Error ? e.message : e}`);
+		console.warn(`[hub] ${name} failed: ${e instanceof Error ? e.message : e}`);
 		return [];
 	}
 }
@@ -154,7 +154,7 @@ const loadStarred = () => fromSource('GitHub stars', async () => {
 	let res = await fetchWithTimeout(url, { headers: { 'User-Agent': USER_AGENT, ...(token && { Authorization: `Bearer ${token}` }) } });
 	// A rejected token should never be worse than no token at all
 	if (res.status === 401 && token) {
-		console.warn('[naf] GITHUB_TOKEN was rejected; retrying unauthenticated');
+		console.warn('[hub] GITHUB_TOKEN was rejected; retrying unauthenticated');
 		res = await fetchWithTimeout(url, { headers: { 'User-Agent': USER_AGENT } });
 	}
 	if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -313,6 +313,7 @@ const buildTime = new Date().toLocaleString('en-US', {
 <script>
 	import { chromeFeatureUrl, getCardKey, safeUrl, type Card } from '../lib/cards';
 
+	// Legacy key from before the rename to Hub; kept so stored PINs keep working
 	const PIN_STORAGE_KEY = 'naf_admin_pin';
 	const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
