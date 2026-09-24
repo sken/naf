@@ -2,257 +2,251 @@
 export const prerender = true;
 
 import Layout from '../layouts/Layout.astro';
-import FeatureCard from '../components/FeatureCard.astro';
-import NewsCard from '../components/NewsCard.astro';
+import ReelItem from '../components/ReelItem.astro';
 import TrendCard from '../components/TrendCard.astro';
-import RepoCard from '../components/RepoCard.astro';
 import HubLogo from '../components/HubLogo.astro';
-import DevCard from '../components/DevCard.astro';
 import Parser from 'rss-parser';
 import * as cheerio from 'cheerio';
 import config from '../../hub.config.json';
+import { normalizeCard, safeUrl, type Card, type CardType } from '../lib/cards';
 
-// 1. Fetch data from the Chrome Status API
-let features: any[] = [];
-try {
-  const response = await fetch(config.endpoints.chromeStatus);
-  if (response.ok) {
-    let text = await response.text();
-    if (text.startsWith(")]}'")) text = text.substring(4).trim();
-    const data = JSON.parse(text);
-    if (data && Array.isArray(data.features)) {
-      features = data.features.slice(0, config.limits.chromeFeatures);
-    }
-  }
-} catch (e) {
-  console.error('Error fetching features:', e);
+const FETCH_TIMEOUT_MS = 15_000;
+const USER_AGENT = 'Astro-Dashboard';
+
+const fetchWithTimeout = (url: string, init: RequestInit = {}) =>
+	fetch(url, { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+
+async function fetchOk(url: string, init: RequestInit = {}) {
+	const res = await fetchWithTimeout(url, init);
+	if (!res.ok) throw new Error(`HTTP ${res.status}`);
+	return res;
 }
 
-// 2. Fetch RSS feeds for industry news
-let newsItems: any[] = [];
-try {
-  const parser = new Parser();
-  let guaranteedItems: any[] = [];
-  let poolItems: any[] = [];
-  
-  for (const source of config.rssSources) {
-    try {
-      const feed = await parser.parseURL(source.url);
-      let filteredItems = feed.items;
-
-      // Filter out coupons/promos from Wired
-      if (source.name.startsWith('Wired') || source.name.includes('Wired')) {
-        filteredItems = filteredItems.filter(item => {
-          if (!item.title) return false;
-          const lowerTitle = item.title.toLowerCase();
-          return !lowerTitle.includes('coupon') && !lowerTitle.includes('promo') && !lowerTitle.includes('codes');
-        });
-      }
-
-      // Filter Medium articles to ONLY English and high signal
-      if (source.name.startsWith('Medium')) {
-        // Exclude Cyrillic, CJK, Arabic, etc.
-        const nonEngChars = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\u0400-\u04ff\u0600-\u06ff]/;
-        // Exclude common foreign stopwords (Spanish, Portuguese, German, French)
-        const foreignWords = /\b(como|para|el|la|en|que|los|las|una|con|por|uma|da|do|na|no|der|die|das|les|des)\b/i;
-        // Clickbait and spam filters
-        const clickbait = /\b(jasa|top \d+|stop using|you need to)\b/i;
-        
-        filteredItems = filteredItems.filter(item => {
-          if (!item.title) return false;
-          if (nonEngChars.test(item.title)) return false;
-          
-          // Drop ALL CAPS SPAM (e.g., JASA WEBSITE...)
-          const lettersOnly = item.title.replace(/[^a-zA-Z]/g, '');
-          if (lettersOnly.length > 10 && lettersOnly === lettersOnly.toUpperCase()) return false;
-          
-          // Drop clickbait patterns
-          if (clickbait.test(item.title)) return false;
-          
-          const matches = item.title.match(foreignWords) || [];
-          if (matches.length >= 2) return false; // Reject if title has multiple foreign stop words
-
-          // Word count heuristic
-          const content = item['content:encoded'] || item.content || item.contentSnippet || '';
-          const textOnly = content.replace(/<[^>]*>?/gm, ' ');
-          const wordCount = textOnly.trim().split(/\s+/).length;
-          
-          // Drop suspiciously short articles
-          if (wordCount < 500) return false;
-          
-          return true;
-        });
-      }
-
-      // Map all items to a standardized format
-      const items = filteredItems.map(item => ({
-        title: item.title,
-        link: item.link,
-        pubDateObj: new Date(item.pubDate || item.isoDate || ''),
-        date: new Date(item.pubDate || item.isoDate || '').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        source: source.name
-      }));
-      
-      // Extract exactly 2 items for the guaranteed list
-      guaranteedItems = [...guaranteedItems, ...items.slice(0, 2)];
-      // Push the rest into the general chronological pool
-      poolItems = [...poolItems, ...items.slice(2)];
-    } catch (err) {}
-  }
-  
-  // Sort the general pool by most recent
-  poolItems.sort((a, b) => b.pubDateObj.getTime() - a.pubDateObj.getTime());
-  
-  // Calculate remaining slots based on config limit
-  const remainingQuota = Math.max(0, config.limits.rssNews - guaranteedItems.length);
-  
-  // Combine guaranteed items with the absolute newest items from the pool
-  newsItems = [...guaranteedItems, ...poolItems.slice(0, remainingQuota)];
-  
-  // Final sort to display them chronologically in the UI
-  newsItems.sort((a, b) => b.pubDateObj.getTime() - a.pubDateObj.getTime());
-} catch (e) {}
-
-// 3. Fetch GitHub Exploring Trends
-let githubRepos: any[] = [];
-try {
-  const res = await fetch(config.endpoints.githubTrending, {
-    headers: { 'User-Agent': 'Astro-Dashboard' }
-  });
-  if (res.ok) {
-    const html = await res.text();
-    const $ = cheerio.load(html);
-    $('article.Box-row').each((i, el) => {
-      if(i >= config.limits.githubTrending) return;
-      const title = $(el).find('h2 a').text().replace(/\s+/g, '').trim();
-      const url = 'https://github.com/' + title;
-      const description = $(el).find('p').text().trim();
-      const language = $(el).find('[itemprop="programmingLanguage"]').text().trim();
-      const starsStr = $(el).find('a[href$="/stargazers"]').first().text().trim().replace(/,/g, '');
-      githubRepos.push({ 
-        full_name: title, 
-        html_url: url, 
-        description, 
-        language, 
-        stargazers_count: parseInt(starsStr, 10) || 0 
-      });
-    });
-  }
-} catch (e) {}
-
-// Fetch user's starred repos
-try {
-  const starredRes = await fetch(`https://api.github.com/users/${config.githubUser}/starred`, {
-    headers: { 'User-Agent': 'Astro-Dashboard' }
-  });
-  if (starredRes.ok) {
-    const starredData = await starredRes.json();
-    starredData.slice(0, config.limits.githubStarred).forEach((repo: any) => {
-      githubRepos.push({
-        full_name: repo.full_name,
-        html_url: repo.html_url,
-        description: repo.description,
-        language: repo.language || 'Unknown',
-        stargazers_count: repo.stargazers_count,
-        isStarred: true
-      });
-    });
-  }
-} catch (e) {
-  console.error('Error fetching starred repos:', e);
+// Each source is fetched independently and in parallel; a failing source is logged and yields [].
+async function fromSource<T>(name: string, load: () => Promise<T[]>): Promise<T[]> {
+	try {
+		return await load();
+	} catch (e) {
+		console.warn(`[hub] ${name} failed: ${e instanceof Error ? e.message : e}`);
+		return [];
+	}
 }
 
-// 4. Fetch Dev.to Trending Articles
-let devItems: any[] = [];
-try {
-  const devRes = await fetch(config.endpoints.devTo);
-  if (devRes.ok) {
-    const articles = await devRes.json();
-    devItems = articles.slice(0, config.limits.devToArticles).map((article: any) => ({
-      title: article.title,
-      url: article.url,
-      reactions: article.positive_reactions_count,
-      author: article.user.name
-    }));
-  }
-} catch (e) {
-  console.error('Error fetching Dev.to:', e);
-}
-// 5. Fetch NPM download stats
-let npmStats: any[] = [];
-try {
-  const frameworks = config.frameworks;
-  for (const framework of frameworks) {
-    const res = await fetch(`${config.endpoints.npmDownloads}${framework}`);
-    if (res.ok) {
-      const data = await res.json();
-      npmStats.push({ framework: data.package, downloads: data.downloads });
-    }
-  }
-  npmStats.sort((a, b) => b.downloads - a.downloads);
-} catch (e) {}
-
-// Combine essential items into the unified canvas (NPM stats moved to footer)
-const allItems = [
-  ...newsItems.map(n => {
-     let sub = n.source.toLowerCase().replace(/[^a-z0-9]/g, '');
-     if (n.source.includes('Medium')) sub = 'medium';
-     return { type: 'news', category: 'articles', subcategory: sub, data: n };
-  }),
-  ...githubRepos.map(r => ({ type: 'github', category: 'repos', subcategory: r.isStarred ? 'starred' : 'trending', data: r })),
-  ...features.map(f => ({ type: 'chrome', category: 'platform', subcategory: 'all', data: f })),
-  ...devItems.map(d => ({ type: 'dev', category: 'articles', subcategory: 'devto', data: d }))
-];
-
-// Phase 1: Intelligent Sizing Algorithm
-// Analyzes the actual content weight to determine how much horizontal grid space it needs
-// Vertical space is now handled automatically by the Masonry script.
-function getSpanClass(item: any) {
-  if (item.type === 'npm') return ""; // NPM stats are just numbers, keep 1x1
-
-  if (item.type === 'github') {
-    return "span-2"; 
-  }
-
-  if (item.type === 'news') {
-    // Long headlines need horizontal breathing room
-    if (item.data.title.length > 65) return "span-2";
-  }
-
-  if (item.type === 'dev') {
-    if (item.data.title && item.data.title.length > 70) return "span-2";
-    return "";
-  }
-
-  if (item.type === 'chrome') {
-    return "span-2";
-  }
-
-  return "";
-}
-
-// Shuffle array deterministically for the build
-let shuffled = allItems.filter(i => !(i.type === 'github' && i.data.language === 'Starred')).sort(() => 0.5 - Math.random());
-const starredItems = allItems.filter(i => i.type === 'github' && i.data.isStarred);
-
-// Ensure starred repos are ALWAYS prominently included near the top of the canvas
-starredItems.forEach((item, i) => {
-  const insertIndex = Math.floor(Math.random() * (i + 5)); // Inject randomly into the first 15 slots
-  shuffled.splice(insertIndex, 0, item);
+// 1. Chrome Status features
+const loadFeatures = () => fromSource('Chrome Status', async () => {
+	let text = await (await fetchOk(config.endpoints.chromeStatus)).text();
+	if (text.startsWith(")]}'")) text = text.substring(4).trim();
+	const data = JSON.parse(text);
+	if (!Array.isArray(data?.features)) return [];
+	return data.features.slice(0, config.limits.chromeFeatures).map((f: any) => ({
+		id: f.id,
+		name: f.name,
+		summary: f.summary,
+		category: f.category,
+		status: f.browsers?.chrome?.status?.text || 'In Development',
+	}));
 });
 
-const buildTime = new Date().toLocaleString('en-US', { 
-  month: 'short', 
-  day: 'numeric', 
-  hour: 'numeric', 
-  minute: '2-digit', 
-  timeZoneName: 'short' 
+// 2. RSS feeds, with "Fair Representation"
+interface NewsEntry { time: number; data: { title: string; link: string; date: string; source: string } }
+
+// Exclude Cyrillic, CJK, Arabic, etc.
+const nonEngChars = /[぀-ヿ㐀-䶿一-鿿Ѐ-ӿ؀-ۿ]/;
+// Common Spanish, Portuguese, German and French stopwords that are not also English words
+const foreignWords = /\b(como|para|el|la|en|que|los|las|una|con|por|uma|da|na|der|das|les|des)\b/gi;
+// Clickbait and spam filters
+const clickbait = /\b(jasa|top \d+|stop using|you need to)\b/i;
+
+function isHighSignalMediumItem(item: Parser.Item): boolean {
+	if (!item.title) return false;
+	if (nonEngChars.test(item.title)) return false;
+
+	// Drop ALL CAPS SPAM (e.g., JASA WEBSITE...)
+	const lettersOnly = item.title.replace(/[^a-zA-Z]/g, '');
+	if (lettersOnly.length > 10 && lettersOnly === lettersOnly.toUpperCase()) return false;
+
+	if (clickbait.test(item.title)) return false;
+
+	// Reject if title has multiple foreign stop words
+	if ((item.title.match(foreignWords) || []).length >= 2) return false;
+
+	// Member-only posts only ship a short teaser in the feed; drop them
+	const content = (item as any)['content:encoded'] || item.content || item.contentSnippet || '';
+	const wordCount = content.replace(/<[^>]*>?/gm, ' ').trim().split(/\s+/).length;
+	return wordCount >= 500;
+}
+
+const isPromo = (title: string) => /coupon|promo|codes/i.test(title);
+
+const loadNews = async (): Promise<NewsEntry[]> => {
+	const parser = new Parser({ timeout: FETCH_TIMEOUT_MS, headers: { 'User-Agent': USER_AGENT } });
+
+	const perSource = await Promise.all(config.rssSources.map(source => fromSource(source.name, async () => {
+		const feed = await parser.parseURL(source.url);
+		let items = feed.items;
+		if (source.name.includes('Wired')) items = items.filter(item => item.title && !isPromo(item.title));
+		if (source.name.startsWith('Medium')) items = items.filter(isHighSignalMediumItem);
+
+		const entries: NewsEntry[] = [];
+		for (const item of items) {
+			const link = safeUrl(item.link);
+			if (!link || !item.title) continue;
+			const pubDate = new Date(item.isoDate || item.pubDate || '');
+			const valid = !Number.isNaN(pubDate.getTime());
+			entries.push({
+				time: valid ? pubDate.getTime() : 0,
+				data: {
+					title: item.title.trim(),
+					link,
+					date: valid ? pubDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '',
+					source: source.name,
+				},
+			});
+		}
+		return entries.sort((a, b) => b.time - a.time);
+	})));
+
+	// Guarantee the 2 newest items from every successful source, then fill the remaining
+	// quota chronologically while capping each source so high-volume publishers can't dominate.
+	const seen = new Set<string>();
+	const counts = new Map<string, number>();
+	const selected: NewsEntry[] = [];
+	const take = (entry: NewsEntry) => {
+		if (seen.has(entry.data.link)) return;
+		seen.add(entry.data.link);
+		counts.set(entry.data.source, (counts.get(entry.data.source) ?? 0) + 1);
+		selected.push(entry);
+	};
+
+	perSource.forEach(entries => entries.slice(0, 2).forEach(take));
+
+	const pool = perSource.flatMap(entries => entries.slice(2)).sort((a, b) => b.time - a.time);
+	for (const entry of pool) {
+		if (selected.length >= config.limits.rssNews) break;
+		if ((counts.get(entry.data.source) ?? 0) >= config.limits.rssMaxPerSource) continue;
+		take(entry);
+	}
+
+	return selected.sort((a, b) => b.time - a.time);
+};
+
+// 3. GitHub Trending (scraped) and the configured user's starred repos
+const loadTrending = () => fromSource('GitHub Trending', async () => {
+	const html = await (await fetchOk(config.endpoints.githubTrending, { headers: { 'User-Agent': USER_AGENT } })).text();
+	const $ = cheerio.load(html);
+	return $('article.Box-row').toArray().slice(0, config.limits.githubTrending).map(el => {
+		const fullName = $(el).find('h2 a').text().replace(/\s+/g, '').trim();
+		const starsStr = $(el).find('a[href$="/stargazers"]').first().text().trim().replace(/,/g, '');
+		return {
+			full_name: fullName,
+			html_url: `https://github.com/${fullName}`,
+			description: $(el).find('p').text().trim(),
+			language: $(el).find('[itemprop="programmingLanguage"]').text().trim(),
+			stargazers_count: parseInt(starsStr, 10) || 0,
+		};
+	});
+});
+
+const loadStarred = () => fromSource('GitHub stars', async () => {
+	// An optional GITHUB_TOKEN raises the API rate limit from 60 to 5,000 requests/hour
+	const url = `https://api.github.com/users/${config.githubUser}/starred`;
+	const token = import.meta.env.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+	let res = await fetchWithTimeout(url, { headers: { 'User-Agent': USER_AGENT, ...(token && { Authorization: `Bearer ${token}` }) } });
+	// A rejected token should never be worse than no token at all
+	if (res.status === 401 && token) {
+		console.warn('[hub] GITHUB_TOKEN was rejected; retrying unauthenticated');
+		res = await fetchWithTimeout(url, { headers: { 'User-Agent': USER_AGENT } });
+	}
+	if (!res.ok) throw new Error(`HTTP ${res.status}`);
+	const repos: any[] = await res.json();
+	return repos.slice(0, config.limits.githubStarred).map(repo => ({
+		full_name: repo.full_name,
+		html_url: repo.html_url,
+		description: repo.description,
+		language: repo.language || 'Unknown',
+		stargazers_count: repo.stargazers_count,
+		isStarred: true,
+	}));
+});
+
+// 4. Dev.to trending articles
+const loadDevTo = () => fromSource('Dev.to', async () => {
+	const articles: any[] = await (await fetchOk(config.endpoints.devTo)).json();
+	return articles.slice(0, config.limits.devToArticles).map(article => ({
+		title: article.title,
+		url: article.url,
+		reactions: article.positive_reactions_count,
+		author: article.user?.name,
+	}));
+});
+
+// 5. NPM weekly downloads
+const loadNpmStats = async () => {
+	const stats = await Promise.all(config.frameworks.map(framework => fromSource(`npm ${framework}`, async () => {
+		const data = await (await fetchOk(`${config.endpoints.npmDownloads}${framework}`)).json();
+		return [{ framework: data.package as string, downloads: data.downloads as number }];
+	})));
+	return stats.flat().sort((a, b) => b.downloads - a.downloads);
+};
+
+const [features, newsItems, trendingRepos, starredRepos, devItems, npmStats] = await Promise.all([
+	loadFeatures(), loadNews(), loadTrending(), loadStarred(), loadDevTo(), loadNpmStats(),
+]);
+
+const subcategoryOf = (sourceName: string) =>
+	sourceName.includes('Medium') ? 'medium' : sourceName.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// Every card goes through the same validation as the /api/saved endpoint (URL scheme checks, field whitelist)
+const toCards = (type: CardType, rows: any[], subcategory: (row: any) => string) =>
+	rows.map(data => normalizeCard({ type, subcategory: subcategory(data), data })).filter((card): card is Card => card !== null);
+
+const regularCards = [
+	...toCards('news', newsItems.map(n => n.data), n => subcategoryOf(n.source)),
+	...toCards('github', trendingRepos, () => 'trending'),
+	...toCards('chrome', features, () => 'all'),
+	...toCards('dev', devItems, () => 'devto'),
+];
+const starredCards = toCards('github', starredRepos, () => 'starred');
+
+// Fisher–Yates shuffle (fresh order on every build)
+for (let i = regularCards.length - 1; i > 0; i--) {
+	const j = Math.floor(Math.random() * (i + 1));
+	[regularCards[i], regularCards[j]] = [regularCards[j], regularCards[i]];
+}
+
+// Ensure starred repos are always prominently placed near the top of the feed
+const feedCards = [...regularCards];
+starredCards.forEach((card, i) => {
+	feedCards.splice(Math.floor(Math.random() * (i + 5)), 0, card);
+});
+
+// Empty cards rendered into <template>s; the client clones these to display saved cards
+const templateCards: Card[] = [
+	{ type: 'news', category: 'articles', subcategory: '', data: { title: '', link: '', date: '', source: '' } },
+	{ type: 'dev', category: 'articles', subcategory: '', data: { title: '', url: '', reactions: 0, author: '' } },
+	{ type: 'github', category: 'repos', subcategory: '', data: { full_name: '', html_url: '', description: '', language: '', stargazers_count: 0 } },
+	{ type: 'chrome', category: 'platform', subcategory: '', data: { id: '0', name: '', summary: '', category: '', status: '' } },
+];
+
+const buildTime = new Date().toLocaleString('en-US', {
+	month: 'short',
+	day: 'numeric',
+	hour: 'numeric',
+	minute: '2-digit',
+	timeZoneName: 'short'
 });
 ---
 
 <Layout title="Hub by Stefan Kendlbacher | Web Trends Dashboard">
 	<main class="dashboard">
 
+		<!-- SVG filter used by the wobbly dotted card borders -->
+		<svg width="0" height="0" style="position:absolute; width:0; height:0;" aria-hidden="true">
+			<filter id="wobbly-border">
+				<feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" result="noise" />
+				<feDisplacementMap in="SourceGraphic" in2="noise" scale="3" xChannelSelector="R" yChannelSelector="G" />
+			</filter>
+		</svg>
 
 		<!-- Unified Master Filter -->
 		<ul role="list" class="reel-feed">
@@ -272,8 +266,8 @@ const buildTime = new Date().toLocaleString('en-US', {
 							<button class="master-filter filter-repos sound-trigger" data-filter="repos">Repositories</button>
 							<button class="master-filter filter-platform sound-trigger" data-filter="platform">Platform Updates</button>
 						</div>
-						<button class="saved-toggle sound-trigger" id="savedToggle" title="View Saved Cards">
-							<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
+						<button class="saved-toggle sound-trigger" id="savedToggle" title="View Saved Cards" aria-pressed="false">
+							<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
 							Saved
 						</button>
 					</div>
@@ -283,7 +277,7 @@ const buildTime = new Date().toLocaleString('en-US', {
 						<button class="sub-filter sound-trigger" data-subfilter="devto">Dev.to</button>
 						<button class="sub-filter sound-trigger" data-subfilter="medium">Medium</button>
 						{Array.from(new Set(config.rssSources.filter(s => !s.name.includes('Medium')).map(s => s.name))).map(name => (
-							<button class="sub-filter sound-trigger" data-subfilter={name.toLowerCase().replace(/[^a-z0-9]/g, '')}>{name}</button>
+							<button class="sub-filter sound-trigger" data-subfilter={subcategoryOf(name)}>{name}</button>
 						))}
 					</div>
 					<div class="sub-filter-pills" data-parent="repos" style="display: none;">
@@ -295,27 +289,12 @@ const buildTime = new Date().toLocaleString('en-US', {
 			</li>
 
 			<!-- Reel Items Canvas -->
-			{shuffled.map((item, i) => {
-				return (
-					<li 
-						class={`reel-item type-${item.type}`} 
-						data-category={item.category}
-						data-subcategory={item.subcategory}
-						data-payload={encodeURIComponent(JSON.stringify(item))}
-					>
-						<div class="reel-card-wrapper">
-							<button class="save-btn" title="Save this card" onclick={`window.saveCard(this.closest('.reel-item'))`}>
-								<svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>
-							</button>
-							{item.type === 'news' && <NewsCard {...item.data} />}
-							{item.type === 'github' && <RepoCard name={item.data.full_name} description={item.data.description} stars={item.data.stargazers_count} language={item.data.language} url={item.data.html_url} />}
-							{item.type === 'chrome' && <FeatureCard id={item.data.id} name={item.data.name} summary={item.data.summary} category={item.data.category} status={item.data.browsers?.chrome?.status?.text || "In Development"} />}
-							{item.type === 'dev' && <DevCard title={item.data.title} url={item.data.url} reactions={item.data.reactions} author={item.data.author} />}
-						</div>
-					</li>
-				)
-			})}
+			{feedCards.map(card => <ReelItem card={card} />)}
 		</ul>
+
+		{templateCards.map(card => (
+			<template data-card-template={card.type}><ReelItem card={card} /></template>
+		))}
 
 		<!-- Framework Stats Footer -->
 		<section class="stats-footer">
@@ -332,208 +311,263 @@ const buildTime = new Date().toLocaleString('en-US', {
 </Layout>
 
 <script>
-	const filters = document.querySelectorAll('.master-filter');
-	const subFilters = document.querySelectorAll('.sub-filter');
-	const subFilterRows = document.querySelectorAll('.sub-filter-pills');
-	const savedToggle = document.getElementById('savedToggle');
+	import { chromeFeatureUrl, getCardKey, safeUrl, type Card } from '../lib/cards';
+
+	// Legacy key from before the rename to Hub; kept so stored PINs keep working
+	const PIN_STORAGE_KEY = 'naf_admin_pin';
+	const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+	const feed = document.querySelector<HTMLUListElement>('.reel-feed')!;
+	const filters = document.querySelectorAll<HTMLButtonElement>('.master-filter');
+	const subFilters = document.querySelectorAll<HTMLButtonElement>('.sub-filter');
+	const subFilterRows = document.querySelectorAll<HTMLElement>('.sub-filter-pills');
+	const savedToggle = document.getElementById('savedToggle') as HTMLButtonElement;
+
 	let activeCategory = 'all';
 	let activeSubcategory = 'all';
 	let isSavedViewActive = false;
+	let savedCards: Card[] = [];
+	const savedKeys = new Set<string>();
 
-	const updateDOM = async () => {
-		if (isSavedViewActive) {
-			await window.loadSavedCards();
-		} else {
-			// Clean up dynamically injected saved cards when disabling the view
-			document.querySelectorAll('.reel-item[data-is-saved-card="true"]').forEach(el => el.remove());
+	// ---- Admin PIN ----------------------------------------------------------------
+
+	const storage = {
+		get: () => { try { return localStorage.getItem(PIN_STORAGE_KEY); } catch { return null; } },
+		set: (pin: string) => { try { localStorage.setItem(PIN_STORAGE_KEY, pin); } catch {} },
+		clear: () => { try { localStorage.removeItem(PIN_STORAGE_KEY); } catch {} },
+	};
+
+	function getPin(promptText: string | null): string | null {
+		const stored = storage.get();
+		if (stored || !promptText) return stored;
+		const pin = prompt(promptText);
+		if (pin) storage.set(pin);
+		return pin || null;
+	}
+
+	/** Calls /api/saved; returns null (after informing the user) on auth or network failure. */
+	async function savedApi(method: 'GET' | 'POST' | 'DELETE', pin: string, body?: unknown): Promise<Response | null> {
+		const res = await fetch('/api/saved', {
+			method,
+			headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${pin}` },
+			body: body === undefined ? undefined : JSON.stringify(body),
+		}).catch(() => null);
+
+		if (res?.status === 401) {
+			storage.clear();
+			alert('Invalid PIN. Please try again.');
+		} else if (res?.status === 429) {
+			alert('Too many failed attempts. Please wait a few minutes.');
 		}
-		
-		const currentItems = document.querySelectorAll('.reel-item:not(.intro-slide)');
-		currentItems.forEach(item => {
-			const htmlItem = item as HTMLElement;
-			const itemCat = htmlItem.dataset.category;
-			const itemSub = htmlItem.dataset.subcategory;
-			const isSavedCard = htmlItem.dataset.isSavedCard === 'true';
-			
-			const catMatch = activeCategory === 'all' || itemCat === activeCategory;
-			const subMatch = activeCategory === 'all' || activeSubcategory === 'all' || itemSub === activeSubcategory;
-			const viewMatch = isSavedViewActive ? isSavedCard : !isSavedCard;
+		return res?.ok ? res : null;
+	}
 
-			if (catMatch && subMatch && viewMatch) {
-				htmlItem.style.display = 'flex';
-			} else {
-				htmlItem.style.display = 'none';
-			}
+	// ---- Saved state ------------------------------------------------------------------
+
+	function syncSaveButtons() {
+		feed.querySelectorAll<HTMLElement>('.reel-item[data-key]').forEach(item => {
+			const saved = savedKeys.has(item.dataset.key!);
+			const btn = item.querySelector<HTMLButtonElement>('.save-btn');
+			if (!btn) return;
+			btn.setAttribute('aria-pressed', String(saved));
+			btn.setAttribute('aria-label', saved ? 'Remove from saved' : 'Save card');
+			btn.title = saved ? 'Remove from saved' : 'Save this card';
 		});
-	};
+	}
 
-	const triggerTransition = () => {
-		if (document.startViewTransition) {
-			document.startViewTransition(updateDOM);
-		} else {
-			updateDOM();
+	async function loadSaved(promptText: string | null): Promise<boolean> {
+		const pin = getPin(promptText);
+		if (!pin) return false;
+		const res = await savedApi('GET', pin);
+		if (!res) return false;
+		savedCards = await res.json();
+		savedKeys.clear();
+		savedCards.forEach(card => {
+			const key = getCardKey(card);
+			if (key) savedKeys.add(key);
+		});
+		syncSaveButtons();
+		return true;
+	}
+
+	async function toggleSave(item: HTMLElement) {
+		const btn = item.querySelector<HTMLButtonElement>('.save-btn');
+		const key = item.dataset.key;
+		const pin = getPin('Enter Admin PIN to authorize saving:');
+		if (!btn || !key || !pin) return;
+
+		if (btn.disabled) return;
+		const card: Card = JSON.parse(decodeURIComponent(item.dataset.payload!));
+		const wasSaved = savedKeys.has(key);
+		btn.classList.remove('has-error');
+
+		btn.disabled = true;
+		const res = await savedApi(wasSaved ? 'DELETE' : 'POST', pin, card);
+		btn.disabled = false;
+		if (!res) {
+			btn.classList.add('has-error');
+			return;
 		}
-	};
+
+		if (wasSaved) {
+			savedKeys.delete(key);
+			savedCards = savedCards.filter(c => getCardKey(c) !== key);
+			if (item.dataset.isSavedCard === 'true') transition(() => item.remove());
+		} else {
+			savedKeys.add(key);
+			savedCards.unshift(card);
+		}
+		syncSaveButtons();
+	}
+
+	// ---- Saved card rendering (cloned from server-rendered <template>s) -----------
+
+	function setText(root: Element, selector: string, value: unknown) {
+		const el = root.querySelector(selector);
+		if (el) el.textContent = value == null ? '' : String(value);
+	}
+
+	function renderSavedCard(card: Card): HTMLElement | null {
+		const template = document.querySelector<HTMLTemplateElement>(`template[data-card-template="${card.type}"]`);
+		const li = template?.content.firstElementChild?.cloneNode(true) as HTMLElement | undefined;
+		const key = getCardKey(card);
+		if (!li || !key) return null;
+
+		li.dataset.category = card.category;
+		li.dataset.subcategory = card.subcategory;
+		li.dataset.key = key;
+		li.dataset.payload = encodeURIComponent(JSON.stringify(card));
+		li.dataset.isSavedCard = 'true';
+
+		let href: string | null = null;
+		switch (card.type) {
+			case 'news':
+				href = safeUrl(card.data.link);
+				setText(li, '.source', card.data.source);
+				setText(li, '.date', card.data.date);
+				setText(li, 'h3', card.data.title);
+				break;
+			case 'dev':
+				href = safeUrl(card.data.url);
+				setText(li, '.reactions', `❤️ ${card.data.reactions}`);
+				setText(li, '.author', `by ${card.data.author}`);
+				setText(li, 'h3', card.data.title);
+				break;
+			case 'github':
+				href = safeUrl(card.data.html_url);
+				setText(li, '.category-badge', card.data.language || 'Code');
+				setText(li, '.stars', `${new Intl.NumberFormat('en-US').format(card.data.stargazers_count)} Stars`);
+				setText(li, 'h3', card.data.full_name);
+				setText(li, 'p', card.data.description || 'No description provided.');
+				break;
+			case 'chrome':
+				href = chromeFeatureUrl(card.data.id);
+				setText(li, '.category-badge', card.data.category || 'General');
+				setText(li, '.status-text', card.data.status);
+				setText(li, 'h3', card.data.name);
+				setText(li, 'p', card.data.summary);
+				break;
+		}
+
+		const link = li.querySelector('a');
+		if (!href || !link) return null;
+		link.href = href;
+		return li;
+	}
+
+	function removeSavedCards() {
+		feed.querySelectorAll('.reel-item[data-is-saved-card="true"]').forEach(el => el.remove());
+	}
+
+	function renderSavedCards() {
+		removeSavedCards();
+		savedCards.forEach(card => {
+			const li = renderSavedCard(card);
+			if (li) feed.appendChild(li);
+		});
+		syncSaveButtons();
+	}
+
+	// ---- Filtering ----------------------------------------------------------------------
+
+	function applyFilters() {
+		feed.querySelectorAll<HTMLElement>('.reel-item:not(.intro-slide)').forEach(item => {
+			const catMatch = activeCategory === 'all' || item.dataset.category === activeCategory;
+			const subMatch = activeCategory === 'all' || activeSubcategory === 'all' || item.dataset.subcategory === activeSubcategory;
+			const viewMatch = isSavedViewActive === (item.dataset.isSavedCard === 'true');
+			item.style.display = catMatch && subMatch && viewMatch ? 'flex' : 'none';
+		});
+	}
+
+	function transition(update: () => void) {
+		if (document.startViewTransition && !prefersReducedMotion) {
+			document.startViewTransition(update);
+		} else {
+			update();
+		}
+	}
 
 	filters.forEach(filter => {
-		filter.addEventListener('click', (e) => {
+		filter.addEventListener('click', () => {
 			filters.forEach(f => f.classList.remove('active'));
-			const clickedPill = e.target as HTMLButtonElement;
-			clickedPill.classList.add('active');
+			filter.classList.add('active');
 
-			activeCategory = clickedPill.dataset.filter;
+			activeCategory = filter.dataset.filter ?? 'all';
 			activeSubcategory = 'all';
 
-			// Toggle sub-filters
 			subFilterRows.forEach(row => {
-				const htmlRow = row as HTMLElement;
-				if (htmlRow.dataset.parent === activeCategory) {
-					htmlRow.style.display = 'flex';
+				const isActiveRow = row.dataset.parent === activeCategory;
+				row.style.display = isActiveRow ? 'flex' : 'none';
+				if (isActiveRow) {
 					// Reset visual active state to "All"
-					htmlRow.querySelectorAll('.sub-filter').forEach(btn => {
-						if ((btn as HTMLElement).dataset.subfilter === 'all') btn.classList.add('active');
-						else btn.classList.remove('active');
+					row.querySelectorAll<HTMLElement>('.sub-filter').forEach(btn => {
+						btn.classList.toggle('active', btn.dataset.subfilter === 'all');
 					});
-				} else {
-					htmlRow.style.display = 'none';
 				}
 			});
 
-			triggerTransition();
+			transition(applyFilters);
 		});
 	});
 
 	subFilters.forEach(filter => {
-		filter.addEventListener('click', (e) => {
-			const clickedPill = e.target as HTMLButtonElement;
-			const parentRow = clickedPill.closest('.sub-filter-pills');
-			parentRow.querySelectorAll('.sub-filter').forEach(f => f.classList.remove('active'));
-			clickedPill.classList.add('active');
-
-			activeSubcategory = clickedPill.dataset.subfilter;
-			triggerTransition();
+		filter.addEventListener('click', () => {
+			filter.closest('.sub-filter-pills')?.querySelectorAll('.sub-filter').forEach(f => f.classList.remove('active'));
+			filter.classList.add('active');
+			activeSubcategory = filter.dataset.subfilter ?? 'all';
+			transition(applyFilters);
 		});
 	});
 
-	savedToggle?.addEventListener('click', () => {
-		isSavedViewActive = !isSavedViewActive;
-		if (isSavedViewActive) {
-			savedToggle.classList.add('active');
+	savedToggle.addEventListener('click', async () => {
+		if (!isSavedViewActive) {
+			if (!(await loadSaved('Enter Admin PIN to view saved cards:'))) return;
+			isSavedViewActive = true;
+			transition(() => { renderSavedCards(); applyFilters(); });
 		} else {
-			savedToggle.classList.remove('active');
+			isSavedViewActive = false;
+			transition(() => { removeSavedCards(); applyFilters(); });
 		}
-		triggerTransition();
+		savedToggle.classList.toggle('active', isSavedViewActive);
+		savedToggle.setAttribute('aria-pressed', String(isSavedViewActive));
 	});
 
-	window.saveCard = async (element) => {
-		let pin = localStorage.getItem('naf_admin_pin');
-		if (!pin) {
-			pin = prompt("Enter Admin PIN to authorize saving:");
-			if (!pin) return;
-			localStorage.setItem('naf_admin_pin', pin);
-		}
+	// Save buttons (static and injected cards) via event delegation
+	feed.addEventListener('click', (e) => {
+		const btn = (e.target as HTMLElement).closest('.save-btn');
+		const item = btn?.closest<HTMLElement>('.reel-item');
+		if (item) toggleSave(item);
+	});
 
-		const btn = element.querySelector('.save-btn');
-		const svg = btn.querySelector('svg');
-		
-		const isCurrentlySaved = svg.style.fill === 'var(--aros-primary)' || 
-		                         svg.getAttribute('fill') === 'var(--aros-primary)' || 
-		                         element.dataset.category === 'saved';
-		                         
-		const method = isCurrentlySaved ? 'DELETE' : 'POST';
-		
-		try {
-			const payload = JSON.parse(decodeURIComponent(element.dataset.payload));
-			const res = await fetch('/api/saved', {
-				method: method,
-				headers: {
-					'Content-Type': 'application/json',
-					'Authorization': `Bearer ${pin}`
-				},
-				body: JSON.stringify(payload)
-			});
-			if (!res.ok) {
-				if (res.status === 401) {
-					localStorage.removeItem('naf_admin_pin');
-					alert("Invalid PIN. Please try again.");
-				}
-				throw new Error("Failed to save");
-			}
-			
-			if (isCurrentlySaved) {
-			    svg.style.fill = 'none';
-			    if (isSavedViewActive && element.dataset.isSavedCard === 'true') {
-			        element.style.display = 'none'; // Hide it visually immediately from the saved view
-			    }
-			} else {
-			    svg.style.fill = 'var(--aros-primary)';
-			    svg.style.stroke = 'var(--aros-primary)';
-			}
-		} catch (e) {
-			console.error(e);
-			svg.style.stroke = 'red';
-		}
-	};
+	// Reflect already-saved cards on load when the admin PIN is known (never prompts)
+	if (storage.get()) loadSaved(null);
 
-	window.loadSavedCards = async () => {
-		let pin = localStorage.getItem('naf_admin_pin');
-		if (!pin) {
-			pin = prompt("Enter Admin PIN to view saved cards:");
-			if (!pin) return;
-			localStorage.setItem('naf_admin_pin', pin);
-		}
+	// ---- 3D tilt + glow ---------------------------------------------------------------------
 
-		try {
-			const res = await fetch('/api/saved', {
-				headers: { 'Authorization': `Bearer ${pin}` }
-			});
-			if (!res.ok) return;
-			const cards = await res.json();
-			
-			const grid = document.querySelector('.reel-feed');
-			if (!grid) return;
-			
-			// Remove previously injected saved cards
-			document.querySelectorAll('.reel-item[data-category="saved"]').forEach(el => el.remove());
-			
-			cards.forEach((item, i) => {
-				const li = document.createElement('li');
-				li.className = `reel-item type-${item.type}`;
-				li.dataset.category = item.category;
-				li.dataset.subcategory = item.subcategory;
-				li.dataset.isSavedCard = 'true';
-				li.dataset.payload = encodeURIComponent(JSON.stringify(item));
-				
-				const d = item.data;
-				let innerHTML = '';
-				
-				const saveBtnHTML = `<button class="save-btn" title="Unsave" onclick="window.saveCard(this.closest('.reel-item'))"><svg viewBox="0 0 24 24" width="24" height="24" stroke="var(--aros-primary)" stroke-width="2" fill="var(--aros-primary)"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg></button>`;
-				
-				if (item.type === 'news') {
-					innerHTML = `<div class="reel-card-wrapper">${saveBtnHTML}<a href="${d.link}" target="_blank" rel="noopener noreferrer" class="news-card sound-trigger"><div class="content-overlay"><div class="meta"><span class="source">${d.source}</span><span class="date">${d.date}</span></div><h3>${d.title}</h3></div></a></div>`;
-				}
-				if (item.type === 'dev') {
-					innerHTML = `<div class="reel-card-wrapper">${saveBtnHTML}<a href="${d.url}" target="_blank" rel="noopener noreferrer" class="dev-card sound-trigger"><div class="content-overlay"><div class="card-header"><span class="author">${d.author}</span><span class="reactions">❤️ ${d.reactions}</span></div><h3>${d.title}</h3></div></a></div>`;
-				}
-				if (item.type === 'github') {
-					innerHTML = `<div class="reel-card-wrapper">${saveBtnHTML}<a href="${d.html_url}" target="_blank" rel="noopener noreferrer" class="repo-card sound-trigger"><div class="content-overlay"><div class="card-header"><span class="language">${d.language}</span><span class="stars">⭐ ${d.stargazers_count}</span></div><h3>${d.full_name}</h3><p>${d.description || ''}</p></div></a></div>`;
-				}
-				if (item.type === 'chrome') {
-					const statusText = d.browsers?.chrome?.status?.text || "In Development";
-					innerHTML = `<div class="reel-card-wrapper">${saveBtnHTML}<a href="https://chromestatus.com/feature/${d.id}" target="_blank" rel="noopener noreferrer" class="feature-card sound-trigger"><div class="content-overlay"><div class="card-header"><span class="category-badge">${d.category}</span><span class="status-indicator"><span class="pulse"></span>${statusText}</span></div><h3>${d.name}</h3><p>${d.summary}</p></div></a></div>`;
-				}
-				
-				li.innerHTML = innerHTML;
-				grid.appendChild(li);
-			});
-		} catch(e) { console.error(e); }
-	};
+	if (window.matchMedia('(hover: hover)').matches && !prefersReducedMotion) {
+		let rafId: number | null = null;
 
-	const feed = document.querySelector('.reel-feed');
-	if (feed && window.matchMedia('(hover: hover)').matches) {
-		let rafId = null;
-
-		feed.addEventListener('mousemove', (e) => {
+		feed.addEventListener('mousemove', (e: MouseEvent) => {
 			const item = (e.target as HTMLElement).closest('.reel-item');
 			if (!item || item.classList.contains('intro-slide')) return;
 
@@ -544,10 +578,10 @@ const buildTime = new Date().toLocaleString('en-US', {
 				const x = (e.clientX - rect.left) / rect.width;
 				const y = (e.clientY - rect.top) / rect.height;
 
-				const rotateY = (x - 0.5) * 10; 
+				const rotateY = (x - 0.5) * 10;
 				const rotateX = (0.5 - y) * 10;
 
-				const wrapper = item.querySelector('.reel-card-wrapper') as HTMLElement;
+				const wrapper = item.querySelector<HTMLElement>('.reel-card-wrapper');
 				if (wrapper) {
 					wrapper.style.setProperty('--mouse-x', `${x * 100}%`);
 					wrapper.style.setProperty('--mouse-y', `${y * 100}%`);
@@ -558,15 +592,15 @@ const buildTime = new Date().toLocaleString('en-US', {
 			});
 		});
 
-		feed.addEventListener('mouseout', (e) => {
+		feed.addEventListener('mouseout', (e: MouseEvent) => {
 			const item = (e.target as HTMLElement).closest('.reel-item');
 			if (!item || item.classList.contains('intro-slide')) return;
-			
-			const relatedTarget = e.relatedTarget as HTMLElement;
+
+			const relatedTarget = e.relatedTarget as HTMLElement | null;
 			if (relatedTarget && item.contains(relatedTarget)) return;
 
 			if (rafId) cancelAnimationFrame(rafId);
-			const wrapper = item.querySelector('.reel-card-wrapper') as HTMLElement;
+			const wrapper = item.querySelector<HTMLElement>('.reel-card-wrapper');
 			if (wrapper) {
 				wrapper.style.setProperty('--rotate-x', `0deg`);
 				wrapper.style.setProperty('--rotate-y', `0deg`);
@@ -574,16 +608,6 @@ const buildTime = new Date().toLocaleString('en-US', {
 			}
 		});
 	}
-	// SVG filter injection for wobbly dotted borders
-	const svgFilterHTML = `
-		<svg width="0" height="0" style="position:absolute; width:0; height:0;">
-			<filter id="wobbly-border">
-				<feTurbulence type="fractalNoise" baseFrequency="0.08" numOctaves="2" result="noise" />
-				<feDisplacementMap in="SourceGraphic" in2="noise" scale="3" xChannelSelector="R" yChannelSelector="G" />
-			</filter>
-		</svg>
-	`;
-	document.body.insertAdjacentHTML('beforeend', svgFilterHTML);
 </script>
 
 <style is:global>
@@ -907,6 +931,12 @@ const buildTime = new Date().toLocaleString('en-US', {
 			height: 100dvh;
 			padding: 0;
 		}
+		/* Give the footer its own snap point so it is reachable after the last card */
+		.stats-footer {
+			scroll-snap-align: start;
+			margin-top: 0;
+			padding: 3rem 1.5rem;
+		}
 	}
 
 	.save-btn {
@@ -937,6 +967,22 @@ const buildTime = new Date().toLocaleString('en-US', {
 		color: var(--aros-primary);
 	}
 
+	.save-btn[aria-pressed="true"] {
+		color: var(--aros-primary);
+	}
+
+	.save-btn[aria-pressed="true"] svg {
+		fill: currentColor;
+	}
+
+	.save-btn.has-error {
+		color: #c0392b;
+	}
+
+	.save-btn:disabled {
+		cursor: progress;
+	}
+
 	/* Thematic Glows & Aarhus Palettes */
 	.type-github { --card-bg: var(--heritage-bg); --card-text: var(--heritage-text); --card-accent: var(--heritage-primary); --card-border: var(--heritage-secondary); --card-glow: rgba(212, 140, 132, 0.15); }
 	.type-chrome { --card-bg: var(--coastal-bg); --card-text: var(--coastal-text); --card-accent: var(--coastal-primary); --card-border: var(--coastal-secondary); --card-glow: rgba(42, 111, 151, 0.15); }
@@ -963,20 +1009,6 @@ const buildTime = new Date().toLocaleString('en-US', {
 		list-style: none;
 	}
 
-	/* CSS Grid Masonry Classes */
-	.span-2 {
-		grid-column: span 2;
-	}
-
-	.row-span-2 {
-		grid-row: span 2;
-	}
-
-	@keyframes slideUp {
-		from { opacity: 0; transform: translateY(30px) scale(0.98); }
-		to { opacity: 1; transform: translateY(0) scale(1); }
-	}
-
 	/* View Transitions overrides */
 	::view-transition-old(root),
 	::view-transition-new(root) {
@@ -986,11 +1018,20 @@ const buildTime = new Date().toLocaleString('en-US', {
 	/* Responsive Fallbacks */
 	@media (max-width: 900px) {
 		h1 { font-size: 3rem; }
-		.hero-bento {
-			grid-template-columns: 1fr;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.reel-card-wrapper,
+		.master-filter,
+		.save-btn {
+			transition: none;
 		}
-		.span-2 {
-			grid-column: span 1;
+		.master-filter:hover,
+		.reel-card-wrapper:hover .save-btn {
+			transform: none;
+		}
+		.sub-filter-pills {
+			animation: none;
 		}
 	}
 </style>

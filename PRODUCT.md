@@ -16,10 +16,10 @@ A lightning-fast, zero-config discovery dashboard that aggregates updates from t
 An aggressively optimized, build-time statically generated aggregator with a "Fair Representation" algorithmic ingest engine. Unlike generic RSS readers or dynamic dashboards, it sidesteps rate limits entirely via build-time fetching and morphs its UI using native View Transitions, delivering instant client-side loads.
 
 ## Operating Context
-Users typically check this daily as part of their routine to catch up on frontend news, GitHub trends, and browser updates. It's used in modern web browsers capable of advanced CSS features (like masonry and container queries) and View Transitions.
+Users typically check this daily as part of their routine to catch up on frontend news, GitHub trends, and browser updates. It's used in modern web browsers capable of advanced CSS features (like multi-column masonry and scroll snapping) and View Transitions.
 
 ## Capabilities and Constraints
-- **Zero-Config Data:** Completely driven by a local `naf.config.json` file.
+- **Zero-Config Data:** Completely driven by a local `hub.config.json` file.
 - **Architecture:** Astro 7 (SSG with Hybrid API endpoints). Data fetching is strictly locked to the Astro build step.
 - **Interactivity:** No heavy client-side frameworks (React, Vue, Alpine). Rely on Vanilla JS and native APIs (View Transitions).
 - **Styling:** Vanilla CSS only. TailwindCSS is strictly prohibited.
@@ -27,12 +27,12 @@ Users typically check this daily as part of their routine to catch up on fronten
 - **Package Manager:** `pnpm` exclusively.
 
 ## Brand Commitments
-- **Name:** Naf
+- **Name:** Hub (served at hub.skendlba.dev; repository `sken/hub`, formerly Naf).
 - **Tone of Voice:** Clever, snappy, and relatable to developers (e.g., "minus the 45 open browser tabs"). Not overly corporate.
 - **Visual Identity:** Aarhus Light Design System. It features a whimsical, hand-drawn ink-and-watercolor aesthetic (inspired by Jakob Martin Strid) with a specific curated palette (Birch Milk, Pale Cobblestone, Fog White, Soft Terracotta, Baltic Blue).
 
 ## Evidence on Hand
-- Implemented Astro architecture with build-time aggregation (`naf.config.json`).
+- Implemented Astro architecture with build-time aggregation (`hub.config.json`).
 - Existing custom CSS framework (Aarhus Light Design System) and DOM filtering animations configured in the repository.
 
 ## Product Principles

@@ -32,14 +32,15 @@ The color system avoids stark white and pure black, opting for a softer, organic
   - **Mobile:** A TikTok/Instagram-style single-column Vertical Reel Feed (`100vw`).
 - **Scroll Snapping (Mobile Only):** On mobile, scrolling uses native `scroll-snap-type: y mandatory` and `scroll-snap-align: center` for continuous, snappy content discovery. 
 - **Hidden Scrollbars (Mobile Only):** Scrollbars are hidden via CSS on mobile viewports to emulate native application mechanics.
+- **Reduced Motion:** With `prefers-reduced-motion: reduce`, the 3D tilt, View Transitions, hover lifts, sub-filter animation and UI sounds are disabled.
 - **Filtering:** 
   - **Client-Side Filtering:** The dashboard uses the native `document.startViewTransition()` API to animate filtering operations entirely in the browser, eliminating the need for server-side re-renders.
   - **Two-Tier Architecture:** Selecting a master category (like Articles or Repositories) reveals a contextual secondary row of pill buttons, allowing deeper sub-filtering (e.g., Medium vs Dev.to) without leaving the static page.
   - **Orthogonal State (Saved):** The "Saved" filter acts as an independent, global toggle button rather than a mutually-exclusive master category. This allows users to cross-filter their saved items (e.g., viewing "Only saved Articles" by turning on the toggle and selecting the Articles master category).
 
 ## Components
-**Standard Reel Card (`.reel-item`)**
-- Must include a clean, accessible save/bookmark button absolutely positioned without obscuring metadata.
+**Standard Reel Card (`.reel-item`, rendered by `ReelItem.astro`)**
+- Must include a clean, accessible save/bookmark button absolutely positioned without obscuring metadata. The button carries an `aria-label` and exposes its state with `aria-pressed`; saved cards show a filled Soft Terracotta bookmark, which is restored on page load when the admin PIN is known.
 - **Visuals:** Cards simulate full-screen media using `radial-gradient` backgrounds mapped to thematic color glow variables, and feature an organic, hand-drawn wobbly dotted border powered by CSS `border: dotted` combined with a native SVG `feDisplacementMap` filter to match the ink-and-watercolor brand. 
 - **Content:** Text and metadata are overlaid at the bottom using `justify-content: flex-end`.
-- **Performance:** Implements `content-visibility: auto` to optimize rendering of off-screen items in the infinite feed.
+- **Stats Footer (Mobile):** The Weekly Framework Adoption footer is its own scroll-snap target so it stays reachable after the last reel card.

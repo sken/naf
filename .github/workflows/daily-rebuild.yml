@@ -13,4 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Send POST Request to Vercel
-        run: curl -X POST ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        env:
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        # -f makes the job fail (instead of silently passing) when the hook returns an error
+        run: curl -fsS -X POST "$VERCEL_DEPLOY_HOOK"

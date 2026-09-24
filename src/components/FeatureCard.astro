@@ -16,7 +16,7 @@ const { id, name, summary, status = "Unknown", category = "General" } = Astro.pr
       <span class="category-badge">{category}</span>
       <span class="status-indicator">
         <span class="pulse"></span>
-        {status}
+        <span class="status-text">{status}</span>
       </span>
     </div>
     

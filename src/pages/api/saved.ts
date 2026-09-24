@@ -1,102 +1,132 @@
 export const prerender = false;
 
-import type { APIRoute } from 'astro';
+import type { APIContext, APIRoute } from 'astro';
 import Redis from 'ioredis';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { getCardKey, normalizeCard } from '../../lib/cards';
 
-// Initialize ioredis with the standard REDIS_URL
-const redis = new Redis(import.meta.env.REDIS_URL || process.env.REDIS_URL || '');
+// Legacy `naf:` prefix from before the rename to Hub; changing it would orphan existing bookmarks
+const LIST_KEY = 'naf:saved_cards';
+const MAX_BODY_BYTES = 16 * 1024;
+const MAX_AUTH_FAILURES = 10;
+const AUTH_FAILURE_WINDOW_SECONDS = 15 * 60;
 
-export const GET: APIRoute = async ({ request }) => {
-  const authHeader = request.headers.get('Authorization');
-  const expectedPin = import.meta.env.ADMIN_PIN;
+const redisUrl = import.meta.env.REDIS_URL || process.env.REDIS_URL;
+const redis = redisUrl ? new Redis(redisUrl, { maxRetriesPerRequest: 2 }) : null;
 
-  if (!expectedPin || authHeader !== `Bearer ${expectedPin}`) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+
+const sha256 = (value: string) => createHash('sha256').update(value).digest();
+
+function clientIp({ request, clientAddress }: APIContext): string {
+  const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  if (forwarded) return forwarded;
+  try {
+    return clientAddress;
+  } catch {
+    return 'unknown';
   }
+}
+
+/** Returns an error Response if the request is not authorized, otherwise null. */
+async function authorize(context: APIContext): Promise<Response | null> {
+  if (!redis) return json({ error: 'Storage not configured' }, 503);
+
+  const expectedPin = import.meta.env.ADMIN_PIN || process.env.ADMIN_PIN;
+  if (!expectedPin) return json({ error: 'Unauthorized' }, 401);
+
+  const failKey = `naf:auth_fail:${clientIp(context)}`;
+  const failures = Number(await redis.get(failKey).catch(() => 0)) || 0;
+  if (failures >= MAX_AUTH_FAILURES) return json({ error: 'Too many attempts' }, 429);
+
+  const header = context.request.headers.get('Authorization') ?? '';
+  // Compare fixed-length digests so the check is constant-time regardless of input length
+  if (timingSafeEqual(sha256(header), sha256(`Bearer ${expectedPin}`))) return null;
+
+  await redis.multi().incr(failKey).expire(failKey, AUTH_FAILURE_WINDOW_SECONDS).exec().catch(() => {});
+  return json({ error: 'Unauthorized' }, 401);
+}
+
+async function readJsonBody(request: Request): Promise<unknown> {
+  const text = await request.text();
+  if (text.length > MAX_BODY_BYTES) throw new Response(null, { status: 413 });
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Response(null, { status: 400 });
+  }
+}
+
+async function readStoredCards(client: Redis) {
+  const raw = await client.lrange(LIST_KEY, 0, -1);
+  return raw.map(entry => {
+    let parsed: unknown = null;
+    try { parsed = JSON.parse(entry); } catch {}
+    return { raw: entry, card: normalizeCard(parsed), key: getCardKey(parsed) };
+  });
+}
+
+export const GET: APIRoute = async (context) => {
+  const denied = await authorize(context);
+  if (denied) return denied;
 
   try {
-    const rawCards = await redis.lrange('naf:saved_cards', 0, -1);
-    const cards = rawCards.map(c => JSON.parse(c));
-    
-    return new Response(JSON.stringify(cards), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    const stored = await readStoredCards(redis!);
+    const seen = new Set<string>();
+    const cards = stored.filter(({ card, key }) => {
+      if (!card || !key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).map(({ card }) => card);
+    return json(cards);
   } catch (e) {
     console.error(e);
-    return new Response(JSON.stringify({ error: 'Database error' }), { status: 500 });
+    return json({ error: 'Database error' }, 500);
   }
 };
 
-export const POST: APIRoute = async ({ request }) => {
-  const authHeader = request.headers.get('Authorization');
-  const expectedPin = import.meta.env.ADMIN_PIN;
-
-  if (!expectedPin || authHeader !== `Bearer ${expectedPin}`) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-  }
+export const POST: APIRoute = async (context) => {
+  const denied = await authorize(context);
+  if (denied) return denied;
 
   try {
-    const card = await request.json();
-    await redis.lpush('naf:saved_cards', JSON.stringify(card));
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    const card = normalizeCard(await readJsonBody(context.request));
+    const key = getCardKey(card);
+    if (!card || !key) return json({ error: 'Invalid card' }, 400);
+
+    const stored = await readStoredCards(redis!);
+    if (stored.some(entry => entry.key === key)) return json({ success: true, duplicate: true });
+
+    await redis!.lpush(LIST_KEY, JSON.stringify(card));
+    return json({ success: true });
   } catch (e) {
+    if (e instanceof Response) return e;
     console.error(e);
-    return new Response(JSON.stringify({ error: 'Database error' }), { status: 500 });
+    return json({ error: 'Database error' }, 500);
   }
 };
 
-export const DELETE: APIRoute = async ({ request }) => {
-  const authHeader = request.headers.get('Authorization');
-  const expectedPin = import.meta.env.ADMIN_PIN;
-
-  if (!expectedPin || authHeader !== `Bearer ${expectedPin}`) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-  }
+export const DELETE: APIRoute = async (context) => {
+  const denied = await authorize(context);
+  if (denied) return denied;
 
   try {
-    const card = await request.json();
-    
-    // Fetch all, filter manually, and rewrite to avoid JSON key ordering issues
-    const rawCards = await redis.lrange('naf:saved_cards', 0, -1);
-    const newCards = [];
-    let removed = false;
-    
-    for (const raw of rawCards) {
-      const parsed = JSON.parse(raw);
-      
-      const isMatch = JSON.stringify(parsed) === JSON.stringify(card) || 
-                      (parsed.data && card.data && (
-                        (parsed.data.link && parsed.data.link === card.data.link) ||
-                        (parsed.data.url && parsed.data.url === card.data.url) ||
-                        (parsed.data.html_url && parsed.data.html_url === card.data.html_url) ||
-                        (parsed.data.id && parsed.data.id === card.data.id)
-                      ));
-                      
-      if (isMatch && !removed) {
-        removed = true; // Remove the first match
-      } else {
-        newCards.push(raw);
-      }
+    const key = getCardKey(await readJsonBody(context.request));
+    if (!key) return json({ error: 'Invalid card' }, 400);
+
+    // Remove each matching entry by its exact stored string. LREM is atomic per call, so
+    // concurrent saves are never lost (unlike rewriting the whole list), and re-serialized
+    // JSON key-ordering drift can't cause a miss because we never re-serialize.
+    const stored = await readStoredCards(redis!);
+    let removed = 0;
+    for (const entry of stored) {
+      if (entry.key === key) removed += await redis!.lrem(LIST_KEY, 1, entry.raw);
     }
-    
-    if (removed) {
-      await redis.del('naf:saved_cards');
-      if (newCards.length > 0) {
-        // rpush array of strings
-        await redis.rpush('naf:saved_cards', ...newCards);
-      }
-    }
-    
-    return new Response(JSON.stringify({ success: true, removed }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return json({ success: true, removed });
   } catch (e) {
+    if (e instanceof Response) return e;
     console.error(e);
-    return new Response(JSON.stringify({ error: 'Database error' }), { status: 500 });
+    return json({ error: 'Database error' }, 500);
   }
 };
