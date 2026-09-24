@@ -3,6 +3,7 @@
   "limits": {
     "chromeFeatures": 12,
     "rssNews": 36,
+    "rssMaxPerSource": 6,
     "githubTrending": 6,
     "githubStarred": 10,
     "devToArticles": 6
